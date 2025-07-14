@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(uuid())
+  name      String
+  email     String     @unique
+  password  String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  books     Book[]
+  progress  Progress[]
+}
+
+model Book {
+  id         String      @id @default(uuid())
+  title      String
+  author     String
+  userId     String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  user       User?       @relation(fields: [userId], references: [id])
+  paragraphs Paragraph[]
+  progress   Progress[]
+}
+
+model Paragraph {
+  id         String      @id @default(uuid())
+  bookId     String
+  order      Int
+  content    String
+  book       Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  progress   Progress[]
+}
+
+model Progress {
+  id          String    @id @default(uuid())
+  userId      String
+  bookId      String
+  paragraphId String
+  position    Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id])
+  book        Book      @relation(fields: [bookId], references: [id])
+  paragraph   Paragraph @relation(fields: [paragraphId], references: [id])
+
+  @@unique([userId, bookId])
+}
