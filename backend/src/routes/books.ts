@@ -2,7 +2,10 @@ import express from 'express';
 import multer from 'multer';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { splitIntoParagraphs, extractTextFromPDF } from '../utils/textProcessor';
+import {
+  splitIntoParagraphs,
+  extractTextFromPDF,
+} from '../utils/textProcessor';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -121,7 +124,9 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     const paragraphs = splitIntoParagraphs(content);
 
     if (paragraphs.length === 0) {
-      return res.status(400).json({ error: 'No valid paragraphs found in content' });
+      return res
+        .status(400)
+        .json({ error: 'No valid paragraphs found in content' });
     }
 
     // Create book and paragraphs in a transaction
@@ -174,84 +179,93 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
 });
 
 // Upload book from file (PDF or text)
-router.post('/upload', authenticateToken, upload.single('file'), async (req: AuthRequest, res) => {
-  try {
-    const { title, author } = req.body;
-    const file = req.file;
+router.post(
+  '/upload',
+  authenticateToken,
+  upload.single('file'),
+  async (req: AuthRequest, res) => {
+    try {
+      const { title, author } = req.body;
+      const file = req.file;
 
-    if (!title || !author) {
-      return res.status(400).json({ error: 'Title and author are required' });
-    }
+      if (!title || !author) {
+        return res.status(400).json({ error: 'Title and author are required' });
+      }
 
-    if (!file) {
-      return res.status(400).json({ error: 'File is required' });
-    }
+      if (!file) {
+        return res.status(400).json({ error: 'File is required' });
+      }
 
-    let content: string;
+      let content: string;
 
-    // Extract text based on file type
-    if (file.mimetype === 'application/pdf') {
-      content = await extractTextFromPDF(file.buffer);
-    } else if (file.mimetype === 'text/plain') {
-      content = file.buffer.toString('utf-8');
-    } else {
-      return res.status(400).json({ error: 'Unsupported file type' });
-    }
+      // Extract text based on file type
+      if (file.mimetype === 'application/pdf') {
+        content = await extractTextFromPDF(file.buffer);
+      } else if (file.mimetype === 'text/plain') {
+        content = file.buffer.toString('utf-8');
+      } else {
+        return res.status(400).json({ error: 'Unsupported file type' });
+      }
 
-    // Split content into paragraphs
-    const paragraphs = splitIntoParagraphs(content);
+      // Split content into paragraphs
+      const paragraphs = splitIntoParagraphs(content);
 
-    if (paragraphs.length === 0) {
-      return res.status(400).json({ error: 'No valid paragraphs found in file' });
-    }
+      if (paragraphs.length === 0) {
+        return res
+          .status(400)
+          .json({ error: 'No valid paragraphs found in file' });
+      }
 
-    // Create book and paragraphs in a transaction
-    const book = await prisma.$transaction(async (tx) => {
-      // Create book
-      const newBook = await tx.book.create({
-        data: {
-          title,
-          author,
-          userId: req.user!.id,
+      // Create book and paragraphs in a transaction
+      const book = await prisma.$transaction(async (tx) => {
+        // Create book
+        const newBook = await tx.book.create({
+          data: {
+            title,
+            author,
+            userId: req.user!.id,
+          },
+        });
+
+        // Create paragraphs
+        for (let i = 0; i < paragraphs.length; i++) {
+          await tx.paragraph.create({
+            data: {
+              bookId: newBook.id,
+              order: i + 1,
+              content: paragraphs[i],
+            },
+          });
+        }
+
+        return newBook;
+      });
+
+      // Fetch the complete book with paragraphs
+      const completeBook = await prisma.book.findUnique({
+        where: { id: book.id },
+        include: {
+          paragraphs: {
+            orderBy: {
+              order: 'asc',
+            },
+          },
+          _count: {
+            select: {
+              paragraphs: true,
+            },
+          },
         },
       });
 
-      // Create paragraphs
-      for (let i = 0; i < paragraphs.length; i++) {
-        await tx.paragraph.create({
-          data: {
-            bookId: newBook.id,
-            order: i + 1,
-            content: paragraphs[i],
-          },
-        });
-      }
-
-      return newBook;
-    });
-
-    // Fetch the complete book with paragraphs
-    const completeBook = await prisma.book.findUnique({
-      where: { id: book.id },
-      include: {
-        paragraphs: {
-          orderBy: {
-            order: 'asc',
-          },
-        },
-        _count: {
-          select: {
-            paragraphs: true,
-          },
-        },
-      },
-    });
-
-    res.status(201).json(completeBook);
-  } catch (error) {
-    console.error('Error uploading book:', error);
-    res.status(500).json({ error: 'Internal server error' });
+      res.status(201).json(completeBook);
+    } catch (error) {
+      console.error('Error uploading book:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
+);
+
 // Delete book
 router.delete('/:id', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -280,45 +294,49 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res) => {
 });
 
 // Search books
-router.get('/search/:query', authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const { query } = req.params;
+router.get(
+  '/search/:query',
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const { query } = req.params;
 
-    const books = await prisma.book.findMany({
-      where: {
-        userId: req.user!.id,
-        OR: [
-          {
-            title: {
-              contains: query,
-              mode: 'insensitive',
+      const books = await prisma.book.findMany({
+        where: {
+          userId: req.user!.id,
+          OR: [
+            {
+              title: {
+                contains: query,
+                mode: 'insensitive',
+              },
             },
-          },
-          {
-            author: {
-              contains: query,
-              mode: 'insensitive',
+            {
+              author: {
+                contains: query,
+                mode: 'insensitive',
+              },
             },
-          },
-        ],
-      },
-      include: {
-        _count: {
-          select: {
-            paragraphs: true,
+          ],
+        },
+        include: {
+          _count: {
+            select: {
+              paragraphs: true,
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
 
-    res.json(books);
-  } catch (error) {
-    console.error('Error searching books:', error);
-    res.status(500).json({ error: 'Internal server error' });
+      res.json(books);
+    } catch (error) {
+      console.error('Error searching books:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
-});
+);
 
 export default router;

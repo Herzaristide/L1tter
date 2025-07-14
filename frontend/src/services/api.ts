@@ -1,8 +1,22 @@
 import axios from 'axios';
 import { AuthResponse, User } from '../types';
 
-const API_BASE_URL =
-  process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = (() => {
+  // If we're in a Codespace
+  if (
+    window.location.hostname.includes('github.dev') ||
+    window.location.hostname.includes('app.github.dev')
+  ) {
+    // Use the same hostname but replace the port with 3001
+    const url = process.env.REACT_APP_CODESPACE_API_URL;
+    return url;
+  }
+  // Otherwise use environment variable or localhost
+  const url = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+  return url;
+})();
+
+console.log('Final API_BASE_URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,

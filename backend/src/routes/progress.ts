@@ -68,11 +68,11 @@ router.get(
           },
         },
         include: {
-          chapter: {
+          book: {
             select: {
               id: true,
-              number: true,
               title: true,
+              author: true,
             },
           },
           paragraph: {
@@ -96,15 +96,15 @@ router.get(
 // Update reading progress
 router.post('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { bookId, chapterId, paragraphId, position } = req.body;
+    const { bookId, paragraphId, position } = req.body;
 
-    if (!bookId || !chapterId || !paragraphId || position === undefined) {
+    if (!bookId || !paragraphId || position === undefined) {
       return res.status(400).json({
-        error: 'bookId, chapterId, paragraphId, and position are required',
+        error: 'bookId, paragraphId, and position are required',
       });
     }
 
-    // Verify all entities belong to the user
+    // Verify book belongs to the user
     const book = await prisma.book.findFirst({
       where: {
         id: bookId,
@@ -116,21 +116,11 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Book not found' });
     }
 
-    const chapter = await prisma.chapter.findFirst({
-      where: {
-        id: chapterId,
-        bookId,
-      },
-    });
-
-    if (!chapter) {
-      return res.status(404).json({ error: 'Chapter not found' });
-    }
-
+    // Verify paragraph belongs to the book
     const paragraph = await prisma.paragraph.findFirst({
       where: {
         id: paragraphId,
-        chapterId,
+        bookId,
       },
     });
 
@@ -147,14 +137,12 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
         },
       },
       update: {
-        chapterId,
         paragraphId,
         position,
       },
       create: {
         userId: req.user!.id,
         bookId,
-        chapterId,
         paragraphId,
         position,
       },
@@ -164,13 +152,6 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
             id: true,
             title: true,
             author: true,
-          },
-        },
-        chapter: {
-          select: {
-            id: true,
-            number: true,
-            title: true,
           },
         },
         paragraph: {

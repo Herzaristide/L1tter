@@ -35,8 +35,21 @@ const Register: React.FC = () => {
       setError('');
       await register(name, email, password);
       navigate('/');
-    } catch (err) {
-      setError('Failed to create account. Email may already be in use.');
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        config: err.config,
+      });
+      // Extract the actual error message from the response
+      const errorMessage =
+        err.response?.data?.error ||
+        err.message ||
+        'Failed to create account. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
