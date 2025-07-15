@@ -70,44 +70,34 @@ const Reader: React.FC = () => {
     }
   }, [book, currentParagraphIndex, paragraphs, updateProgress]);
 
-  const handlePreviousParagraph = React.useCallback(() => {
+  const handlePreviousParagraph = () => {
     if (currentParagraphIndex > 0) {
       setCurrentParagraphIndex(currentParagraphIndex - 1);
     }
-  }, [currentParagraphIndex]);
+  };
 
-  const handleNextParagraph = React.useCallback(() => {
+  const handleNextParagraph = () => {
     if (currentParagraphIndex < paragraphs.length - 1) {
       setCurrentParagraphIndex(currentParagraphIndex + 1);
     }
-  }, [currentParagraphIndex, paragraphs.length]);
+  };
 
-  const handleKeyPress = React.useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        handlePreviousParagraph();
-      } else if (e.key === 'ArrowRight') {
-        handleNextParagraph();
-      } else if (e.key === 'Escape') {
-        navigate(`/book/${bookId}`);
-      }
-    },
-    [
-      currentParagraphIndex,
-      paragraphs.length,
-      bookId,
-      navigate,
-      handlePreviousParagraph,
-      handleNextParagraph,
-    ]
-  );
+  const handleKeyPress = (e: KeyboardEvent) => {
+    if (e.key === 'ArrowLeft') {
+      handlePreviousParagraph();
+    } else if (e.key === 'ArrowRight') {
+      handleNextParagraph();
+    } else if (e.key === 'Escape') {
+      navigate(`/book/${bookId}`);
+    }
+  };
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyPress);
     return () => {
       document.removeEventListener('keydown', handleKeyPress);
     };
-  }, [handleKeyPress]);
+  }, [currentParagraphIndex, paragraphs.length, bookId, navigate]);
 
   if (loading) {
     return (
@@ -136,6 +126,8 @@ const Reader: React.FC = () => {
       </div>
     );
   }
+
+  const currentParagraph = paragraphs[currentParagraphIndex];
 
   return (
     <div className='min-h-screen bg-gray-50'>

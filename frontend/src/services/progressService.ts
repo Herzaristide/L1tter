@@ -14,13 +14,11 @@ export const progressService = {
 
   updateProgress: async (
     bookId: string,
-    chapterId: string,
     paragraphId: string,
     position: number
   ): Promise<Progress> => {
     const response = await api.post('/progress', {
       bookId,
-      chapterId,
       paragraphId,
       position,
     });

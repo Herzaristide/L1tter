@@ -12,18 +12,8 @@ export interface Book {
   userId?: string;
   createdAt: string;
   updatedAt: string;
-  chapters?: Chapter[];
-  progress?: Progress[];
-}
-
-export interface Chapter {
-  id: string;
-  bookId: string;
-  number: number;
-  title: string;
-  createdAt: string;
-  book?: Book;
   paragraphs?: Paragraph[];
+  progress?: Progress[];
   _count?: {
     paragraphs: number;
   };
@@ -31,24 +21,22 @@ export interface Chapter {
 
 export interface Paragraph {
   id: string;
-  chapterId: string;
+  bookId: string;
   order: number;
   content: string;
-  chapter?: Chapter;
+  book?: Book;
 }
 
 export interface Progress {
   id: string;
   userId: string;
   bookId: string;
-  chapterId: string;
   paragraphId: string;
   position: number;
   createdAt: string;
   updatedAt: string;
   user?: User;
   book?: Book;
-  chapter?: Chapter;
   paragraph?: Paragraph;
 }
 

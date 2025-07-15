@@ -7,11 +7,6 @@ export const bookService = {
     return response.data;
   },
 
-  getPublishedBooks: async (): Promise<Book[]> => {
-    const response = await api.get('/books/published');
-    return response.data;
-  },
-
   getBook: async (id: string): Promise<Book> => {
     const response = await api.get(`/books/${id}`);
     return response.data;
@@ -23,6 +18,24 @@ export const bookService = {
     content: string
   ): Promise<Book> => {
     const response = await api.post('/books', { title, author, content });
+    return response.data;
+  },
+
+  uploadBookFile: async (
+    title: string,
+    author: string,
+    file: File
+  ): Promise<Book> => {
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('author', author);
+    formData.append('file', file);
+
+    const response = await api.post('/books/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   },
 

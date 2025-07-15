@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Book, Chapter } from '../types';
+import { Book, Paragraph } from '../types';
 import { bookService } from '../services/bookService';
-import { chapterService } from '../services/contentService';
 
 const BookView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [book, setBook] = useState<Book | null>(null);
-  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [paragraphs, setParagraphs] = useState<Paragraph[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -18,13 +17,15 @@ const BookView: React.FC = () => {
 
       try {
         setLoading(true);
-        const [bookData, chaptersData] = await Promise.all([
-          bookService.getBook(id),
-          chapterService.getChapters(id),
-        ]);
+        const bookData = await bookService.getBook(id);
         setBook(bookData);
-        setChapters(chaptersData);
+
+        // Get paragraphs directly from the book data
+        if (bookData.paragraphs) {
+          setParagraphs(bookData.paragraphs);
+        }
       } catch (err) {
+        console.error('Error loading book:', err);
         setError('Failed to load book');
       } finally {
         setLoading(false);
@@ -76,14 +77,11 @@ const BookView: React.FC = () => {
                 Continue Reading
               </h3>
               <p className='text-primary-700 text-sm mb-3'>
-                Last read: Chapter {progress.chapter?.number} -{' '}
-                {progress.chapter?.title}
+                Last read: Paragraph {progress.paragraph?.order}
               </p>
               <button
                 onClick={() =>
-                  navigate(
-                    `/read/${progress.chapterId}/${progress.paragraphId}`
-                  )
+                  navigate(`/read/${book.id}/${progress.paragraphId}`)
                 }
                 className='btn-primary'
               >
@@ -94,7 +92,8 @@ const BookView: React.FC = () => {
 
           <div className='grid grid-cols-2 gap-4 text-sm text-gray-600'>
             <div>
-              <span className='font-medium'>Chapters:</span> {chapters.length}
+              <span className='font-medium'>Paragraphs:</span>{' '}
+              {paragraphs.length}
             </div>
             <div>
               <span className='font-medium'>Added:</span>{' '}
@@ -105,29 +104,27 @@ const BookView: React.FC = () => {
       </div>
 
       <div className='card'>
-        <h2 className='text-xl font-semibold text-gray-900 mb-4'>Chapters</h2>
-        <div className='space-y-2'>
-          {chapters.map((chapter) => (
-            <div
-              key={chapter.id}
-              className='flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50'
-            >
-              <div>
-                <h3 className='font-medium text-gray-900'>
-                  Chapter {chapter.number}: {chapter.title}
-                </h3>
-                <p className='text-sm text-gray-600'>
-                  {chapter._count?.paragraphs || 0} paragraphs
+        <h2 className='text-xl font-semibold text-gray-900 mb-4'>Reading</h2>
+        <div className='space-y-4'>
+          <div className='flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50'>
+            <div>
+              <h3 className='font-medium text-gray-900'>Start Reading</h3>
+              <p className='text-sm text-gray-600'>
+                {paragraphs.length} paragraphs available
+              </p>
+              {paragraphs.length > 0 && (
+                <p className='text-sm text-gray-500 mt-1'>
+                  Preview: {paragraphs[0]?.content.substring(0, 100)}...
                 </p>
-              </div>
-              <button
-                onClick={() => navigate(`/read/${chapter.id}`)}
-                className='btn-primary'
-              >
-                Read
-              </button>
+              )}
             </div>
-          ))}
+            <button
+              onClick={() => navigate(`/read/${book.id}`)}
+              className='btn-primary'
+            >
+              Start Reading
+            </button>
+          </div>
         </div>
       </div>
     </div>

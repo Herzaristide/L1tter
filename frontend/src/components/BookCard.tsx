@@ -9,9 +9,12 @@ interface BookCardProps {
 
 const BookCard: React.FC<BookCardProps> = ({ book, onDelete }) => {
   const progress = book.progress?.[0];
-  const progressPercentage = progress
-    ? ((progress.chapter?.number || 1) / (book.chapters?.length || 1)) * 100
-    : 0;
+  const totalParagraphs =
+    book._count?.paragraphs || book.paragraphs?.length || 0;
+  const progressPercentage =
+    progress && totalParagraphs > 0
+      ? ((progress.paragraph?.order || 1) / totalParagraphs) * 100
+      : 0;
 
   return (
     <div className='card hover:shadow-lg transition-shadow'>
@@ -45,14 +48,14 @@ const BookCard: React.FC<BookCardProps> = ({ book, onDelete }) => {
             ></div>
           </div>
           <p className='text-xs text-gray-500 mt-1'>
-            Chapter {progress.chapter?.number}: {progress.chapter?.title}
+            Paragraph {progress.paragraph?.order} of {totalParagraphs}
           </p>
         </div>
       )}
 
       <div className='flex justify-between items-center'>
         <span className='text-xs text-gray-500'>
-          {book.chapters?.length || 0} chapters
+          {totalParagraphs} paragraphs
         </span>
         <Link to={`/book/${book.id}`} className='btn-primary text-sm'>
           {progress ? 'Continue Reading' : 'Start Reading'}

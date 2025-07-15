@@ -55,7 +55,7 @@ const AppRoutes: React.FC = () => {
           }
         />
         <Route
-          path='/read/:chapterId'
+          path='/read/:bookId'
           element={
             <ProtectedRoute>
               <Reader />
@@ -63,7 +63,7 @@ const AppRoutes: React.FC = () => {
           }
         />
         <Route
-          path='/read/:chapterId/:paragraphId'
+          path='/read/:bookId/:paragraphId'
           element={
             <ProtectedRoute>
               <Reader />

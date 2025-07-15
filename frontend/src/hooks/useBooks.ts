@@ -10,7 +10,7 @@ export const useBooks = () => {
   const fetchBooks = async () => {
     try {
       setLoading(true);
-      const data = await bookService.getPublishedBooks();
+      const data = await bookService.getBooks();
       setBooks(data);
       setError(null);
     } catch (err) {

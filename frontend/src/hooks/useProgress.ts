@@ -24,21 +24,32 @@ export const useProgress = (bookId?: string) => {
 
   const updateProgress = async (
     bookId: string,
-    chapterId: string,
     paragraphId: string,
     position: number
   ) => {
     try {
       const updatedProgress = await progressService.updateProgress(
         bookId,
-        chapterId,
         paragraphId,
         position
       );
       setProgress(updatedProgress);
+      setError(null);
       return updatedProgress;
     } catch (err) {
+      setError('Failed to update progress');
       throw new Error('Failed to update progress');
+    }
+  };
+
+  const deleteProgress = async (bookId: string) => {
+    try {
+      await progressService.deleteProgress(bookId);
+      setProgress(null);
+      setError(null);
+    } catch (err) {
+      setError('Failed to delete progress');
+      throw new Error('Failed to delete progress');
     }
   };
 
@@ -52,5 +63,6 @@ export const useProgress = (bookId?: string) => {
     error,
     fetchProgress,
     updateProgress,
+    deleteProgress,
   };
 };
