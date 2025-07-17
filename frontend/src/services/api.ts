@@ -58,12 +58,14 @@ export const authService = {
   register: async (
     name: string,
     email: string,
-    password: string
+    password: string,
+    adminKey?: string
   ): Promise<AuthResponse> => {
     const response = await api.post('/auth/register', {
       name,
       email,
       password,
+      adminKey,
     });
     const { user, token } = response.data;
 

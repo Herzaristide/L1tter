@@ -22,32 +22,39 @@ const SearchBar: React.FC<SearchBarProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className='relative'>
-      <div className='flex'>
+    <form
+      onSubmit={handleSubmit}
+      className="fixed top-6 left-1/2 -translate-x-1/2 z-40 w-full max-w-xl px-4"
+      role="search"
+      aria-label="Search books"
+    >
+      <div className="relative flex items-center shadow-lg rounded-xl bg-white/80 backdrop-blur border border-gray-200">
         <input
-          type='text'
+          type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={placeholder}
-          className='input-field pr-20'
+          className="w-full px-5 py-3 text-lg rounded-xl bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder-gray-400"
+          aria-label="Search books"
         />
-        <div className='absolute right-2 top-1/2 transform -translate-y-1/2 flex space-x-1'>
-          {query && (
-            <button
-              type='button'
-              onClick={handleClear}
-              className='text-gray-400 hover:text-gray-600 px-2'
-            >
-              Clear
-            </button>
-          )}
+        {query && (
           <button
-            type='submit'
-            className='bg-primary-600 hover:bg-primary-700 text-white px-3 py-1 rounded text-sm'
+            type="button"
+            onClick={handleClear}
+            className="absolute right-24 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 px-2"
+            aria-label="Clear search"
           >
-            Search
+            <span aria-hidden="true">✕</span>
           </button>
-        </div>
+        )}
+        <button
+          type="submit"
+          className="absolute right-4 top-1/2 -translate-y-1/2 bg-primary-600 hover:bg-primary-700 text-white px-5 py-2 rounded-xl text-base font-semibold shadow-md transition-colors"
+          aria-label="Search"
+        >
+          <span className="hidden sm:inline">Search</span>
+          <span className="sm:hidden">🔍</span>
+        </button>
       </div>
     </form>
   );

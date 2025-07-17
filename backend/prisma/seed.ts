@@ -8,11 +8,21 @@ async function main() {
   // Create sample users
   const hashedPassword = await bcrypt.hash('password123', 10);
 
+  const adminUser = await prisma.user.create({
+    data: {
+      name: 'Admin User',
+      email: 'admin@example.com',
+      password: hashedPassword,
+      role: 'ADMIN',
+    },
+  });
+
   const user1 = await prisma.user.create({
     data: {
       name: 'John Doe',
       email: 'john@example.com',
       password: hashedPassword,
+      role: 'USER',
     },
   });
 
@@ -21,6 +31,7 @@ async function main() {
       name: 'Jane Smith',
       email: 'jane@example.com',
       password: hashedPassword,
+      role: 'USER',
     },
   });
 
@@ -103,6 +114,7 @@ When enough years had gone by to enable us to look back on them, we sometimes di
 
   console.log('Database seeded successfully!');
   console.log('Sample users created:');
+  console.log('  Email: admin@example.com, Password: password123 (ADMIN)');
   console.log('  Email: john@example.com, Password: password123');
   console.log('  Email: jane@example.com, Password: password123');
 }

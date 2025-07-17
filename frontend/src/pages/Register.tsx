@@ -7,6 +7,7 @@ const Register: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [adminKey, setAdminKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,7 +34,7 @@ const Register: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      await register(name, email, password);
+      await register(name, email, password, adminKey || undefined);
       navigate('/');
     } catch (err: any) {
       console.error('Registration error:', err);
@@ -146,6 +147,26 @@ const Register: React.FC = () => {
               className='input-field mt-1'
               placeholder='Confirm your password'
             />
+          </div>
+
+          <div>
+            <label
+              htmlFor='adminKey'
+              className='block text-sm font-medium text-gray-700'
+            >
+              Admin Key (Optional)
+            </label>
+            <input
+              id='adminKey'
+              type='password'
+              value={adminKey}
+              onChange={(e) => setAdminKey(e.target.value)}
+              className='input-field mt-1'
+              placeholder='Enter admin key to create admin account'
+            />
+            <p className='mt-1 text-xs text-gray-500'>
+              Leave empty to create a regular user account
+            </p>
           </div>
 
           <button
