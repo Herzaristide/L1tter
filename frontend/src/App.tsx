@@ -20,10 +20,10 @@ const AppRoutes: React.FC = () => {
   const { isAuthenticated } = useAuth();
 
   return (
-    <div className='min-h-screen bg-white dark:bg-black text-black dark:text-white'>
+    <div className='h-screen w-screen bg-white dark:bg-black text-black dark:text-white'>
       {isAuthenticated && <Navbar />}
 
-      <main>
+      <main className='px-8 lg:px-40 h-screen w-screen'>
         <Routes>
           <Route
             path='/login'
@@ -31,7 +31,9 @@ const AppRoutes: React.FC = () => {
           />
           <Route
             path='/register'
-            element={isAuthenticated ? <Navigate to='/' replace /> : <Register />}
+            element={
+              isAuthenticated ? <Navigate to='/' replace /> : <Register />
+            }
           />
           <Route
             path='/'

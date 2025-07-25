@@ -1,99 +1,231 @@
-import express from 'express';
-import multer from 'multer';
+import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken, requireAdmin, AuthRequest } from '../middleware/auth';
-import {
-  splitIntoParagraphs,
-  extractTextFromPDF,
-  analyzeBookStructure,
-} from '../utils/textProcessor';
+import { AuthRequest, authenticateToken } from '../middleware/auth';
 
-const router = express.Router();
+const router = Router();
 const prisma = new PrismaClient();
 
-// Configure multer for file uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf' || file.mimetype === 'text/plain') {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PDF and text files are allowed'));
-    }
-  },
-});
-
-// Get all books for authenticated user
-router.get('/', authenticateToken, async (req: AuthRequest, res) => {
+// Get all books with search and filtering
+router.get('/', async (req: AuthRequest, res: Response) => {
   try {
+    const {
+      search,
+      language = 'en',
+      tag,
+      author,
+      collection,
+      isPublic,
+      page = '1',
+      limit = '10',
+    } = req.query;
+
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const take = parseInt(limit as string);
+
+    const where: any = {
+      ...(isPublic === 'true' ? { isPublic: true } : {}),
+      ...(collection ? { collectionId: collection as string } : {}),
+      deletedAt: null,
+    };
+
+    // Search in book locales
+    if (search) {
+      where.locales = {
+        some: {
+          OR: [{ title: { contains: search as string, mode: 'insensitive' } }],
+        },
+      };
+    }
+
+    // Filter by author
+    if (author) {
+      where.authors = {
+        some: {
+          author: {
+            name: { contains: author as string, mode: 'insensitive' },
+          },
+        },
+      };
+    }
+
+    // Filter by tag
+    if (tag) {
+      where.tags = {
+        some: {
+          tag: {
+            name: { contains: tag as string, mode: 'insensitive' },
+          },
+        },
+      };
+    }
+
     const books = await prisma.book.findMany({
-      where: {
-        userId: req.user!.id,
-      },
+      where,
+      skip,
+      take,
       include: {
-        paragraphs: {
+        locales: {
+          where: { language: language as string },
+          take: 1,
+        },
+        authors: {
+          include: {
+            author: {
+              select: {
+                id: true,
+                name: true,
+                bio: true,
+              },
+            },
+          },
+        },
+        tags: {
+          include: {
+            tag: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              },
+            },
+          },
+        },
+        collection: {
           select: {
             id: true,
-            order: true,
+            name: true,
+            description: true,
           },
-          orderBy: {
-            order: 'asc',
-          },
-          take: 1, // Just get the first paragraph to show progress
         },
-        progress: {
-          where: {
-            userId: req.user!.id,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            imageUrl: true,
           },
-          include: {
-            paragraph: true,
+        },
+        ratings: {
+          select: {
+            rating: true,
           },
         },
         _count: {
           select: {
-            paragraphs: true,
+            chapters: true,
+            ratings: true,
           },
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     });
 
-    res.json(books);
+    // Calculate average ratings
+    const booksWithRatings = books.map((book) => {
+      const avgRating =
+        book.ratings.length > 0
+          ? book.ratings.reduce((sum, r) => sum + r.rating, 0) /
+            book.ratings.length
+          : null;
+
+      const { ratings, ...bookWithoutRatings } = book;
+      return {
+        ...bookWithoutRatings,
+        averageRating: avgRating,
+      };
+    });
+
+    const totalBooks = await prisma.book.count({ where });
+
+    res.json({
+      books: booksWithRatings,
+      pagination: {
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+        total: totalBooks,
+        pages: Math.ceil(totalBooks / parseInt(limit as string)),
+      },
+    });
   } catch (error) {
-    console.error('Error fetching books:', error);
+    console.error('Get books error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Get single book by ID
-router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
+router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const { language = 'en' } = req.query;
 
-    const book = await prisma.book.findFirst({
-      where: {
-        id,
-        userId: req.user!.id,
-      },
+    const book = await prisma.book.findUnique({
+      where: { id },
       include: {
-        paragraphs: {
-          orderBy: {
-            order: 'asc',
+        locales: true,
+        authors: {
+          include: {
+            author: {
+              include: {
+                links: true,
+                tags: {
+                  include: {
+                    tag: true,
+                  },
+                },
+              },
+            },
           },
         },
-        progress: {
-          where: {
-            userId: req.user!.id,
+        chapters: {
+          where: { deletedAt: null },
+          include: {
+            locales: {
+              where: { language: language as string },
+            },
+            _count: {
+              select: {
+                notes: true,
+              },
+            },
           },
+          orderBy: { order: 'asc' },
+        },
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
+        collection: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            isPublic: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            imageUrl: true,
+          },
+        },
+        ratings: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                imageUrl: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
         },
         _count: {
           select: {
-            paragraphs: true,
+            chapters: true,
+            ratings: true,
+            Note: true,
           },
         },
       },
@@ -103,405 +235,340 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Book not found' });
     }
 
-    res.json(book);
+    // Check if book is accessible (public or user owns it)
+    if (!book.isPublic && book.userId !== req.user?.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Calculate average rating
+    const avgRating =
+      book.ratings.length > 0
+        ? book.ratings.reduce((sum, r) => sum + r.rating, 0) /
+          book.ratings.length
+        : null;
+
+    res.json({
+      ...book,
+      averageRating: avgRating,
+    });
   } catch (error) {
-    console.error('Error fetching book:', error);
+    console.error('Get book error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Create new book with text content
-router.post('/', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+// Create new book
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { title, author, content } = req.body;
+    const {
+      title,
+      language = 'en',
+      imageUrl,
+      collectionId,
+      isPublic = false,
+      authorIds = [],
+      tagIds = [],
+      chapters = [],
+    } = req.body;
 
-    if (!title || !author || !content) {
-      return res
-        .status(400)
-        .json({ error: 'Title, author, and content are required' });
-    }
-
-    // Split content into paragraphs
-    const paragraphs = splitIntoParagraphs(content);
-
-    if (paragraphs.length === 0) {
-      return res
-        .status(400)
-        .json({ error: 'No valid paragraphs found in content' });
-    }
-
-    // Create book and paragraphs in a transaction
     const book = await prisma.$transaction(async (tx) => {
       // Create book
       const newBook = await tx.book.create({
         data: {
-          title,
-          author,
           userId: req.user!.id,
+          collectionId,
+          isPublic,
+          createdBy: req.user!.id,
         },
       });
 
-      // Create paragraphs
-      for (let i = 0; i < paragraphs.length; i++) {
-        await tx.paragraph.create({
-          data: {
+      // Create book locale
+      await tx.bookLocale.create({
+        data: {
+          bookId: newBook.id,
+          language,
+          title,
+          imageUrl,
+        },
+      });
+
+      // Connect authors
+      if (authorIds.length > 0) {
+        await tx.bookAuthor.createMany({
+          data: authorIds.map((authorId: string) => ({
             bookId: newBook.id,
-            order: i + 1,
-            content: paragraphs[i],
-          },
+            authorId,
+          })),
         });
+      }
+
+      // Connect tags
+      if (tagIds.length > 0) {
+        await tx.bookTag.createMany({
+          data: tagIds.map((tagId: string) => ({
+            bookId: newBook.id,
+            tagId,
+          })),
+        });
+      }
+
+      // Create chapters if provided
+      if (chapters.length > 0) {
+        for (let i = 0; i < chapters.length; i++) {
+          const chapter = chapters[i];
+          const newChapter = await tx.chapter.create({
+            data: {
+              bookId: newBook.id,
+              order: i + 1,
+              createdBy: req.user!.id,
+            },
+          });
+
+          await tx.chapterLocale.create({
+            data: {
+              chapterId: newChapter.id,
+              language,
+              title: chapter.title || `Chapter ${i + 1}`,
+              content: chapter.content,
+            },
+          });
+        }
       }
 
       return newBook;
     });
 
-    // Fetch the complete book with paragraphs
+    // Fetch complete book data
     const completeBook = await prisma.book.findUnique({
       where: { id: book.id },
       include: {
-        paragraphs: {
-          orderBy: {
-            order: 'asc',
+        locales: true,
+        authors: {
+          include: {
+            author: true,
           },
         },
-        _count: {
-          select: {
-            paragraphs: true,
+        tags: {
+          include: {
+            tag: true,
           },
+        },
+        chapters: {
+          include: {
+            locales: true,
+          },
+          orderBy: { order: 'asc' },
         },
       },
     });
 
-    res.status(201).json(completeBook);
+    res.status(201).json({
+      message: 'Book created successfully',
+      book: completeBook,
+    });
   } catch (error) {
-    console.error('Error creating book:', error);
+    console.error('Create book error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Upload book from file (PDF or text)
-router.post(
-  '/upload',
+// Update book
+router.put(
+  '/:id',
   authenticateToken,
-  requireAdmin,
-  upload.single('file'),
-  async (req: AuthRequest, res) => {
+  async (req: AuthRequest, res: Response) => {
     try {
-      let { title, author } = req.body;
-      const file = req.file;
+      const { id } = req.params;
+      const { isPublic, collectionId, orderInCollection } = req.body;
 
-      if (!file) {
-        return res.status(400).json({ error: 'File is required' });
-      }
-
-      let content: string;
-
-      // Extract text based on file type
-      if (file.mimetype === 'application/pdf') {
-        // Configure AI extraction for upload
-        const aiConfig = {
-          enabled: process.env.ENABLE_AI_EXTRACTION === 'true',
-          fallbackThreshold: parseInt(process.env.AI_FALLBACK_THRESHOLD || '100'),
-          provider: (process.env.AI_PROVIDER as any) || 'openai',
-          apiKey: process.env.OPENAI_API_KEY
-        };
-
-        const extractionResult = await extractTextFromPDF(file.buffer, aiConfig);
-        content = extractionResult.text;
-
-        console.log(`Upload extraction method: ${extractionResult.method}`);
-      } else if (file.mimetype === 'text/plain') {
-        content = file.buffer.toString('utf-8');
-      } else {
-        return res.status(400).json({ error: 'Unsupported file type' });
-      }
-
-      // Analyze book structure for automatic title/author detection
-      const bookStructure = analyzeBookStructure(content);
-
-      // Use detected title/author if not provided manually
-      if (!title && bookStructure.title) {
-        title = bookStructure.title;
-      }
-      if (!author && bookStructure.author) {
-        author = bookStructure.author;
-      }
-
-      // Validate that we have at least a title
-      if (!title) {
-        return res.status(400).json({
-          error: 'Title is required (could not be auto-detected from file)',
-          detected: {
-            title: bookStructure.title,
-            author: bookStructure.author,
-            hasChapters: bookStructure.hasChapters,
-            chapterCount: bookStructure.chapters.length
-          }
-        });
-      }
-
-      // Use a default author if not provided
-      if (!author) {
-        author = 'Unknown Author';
-      }
-
-      // Determine if we should use chapter-based or paragraph-based processing
-      let paragraphs: string[];
-
-      if (bookStructure.hasChapters && bookStructure.chapters.length > 1) {
-        // Use chapter content as paragraphs for now
-        // (You could extend the schema to support chapters properly)
-        paragraphs = bookStructure.chapters
-          .map(chapter => `**${chapter.title}**\n\n${chapter.content}`)
-          .flatMap(chapterText => splitIntoParagraphs(chapterText))
-          .filter(p => p.length > 20);
-      } else {
-        // Standard paragraph splitting
-        paragraphs = splitIntoParagraphs(content);
-      }
-
-      if (paragraphs.length === 0) {
-        return res
-          .status(400)
-          .json({ error: 'No valid paragraphs found in file' });
-      }
-
-      // Create book and paragraphs in a transaction
-      const book = await prisma.$transaction(async (tx) => {
-        // Create book
-        const newBook = await tx.book.create({
-          data: {
-            title,
-            author,
-            userId: req.user!.id,
-          },
-        });
-
-        // Create paragraphs
-        for (let i = 0; i < paragraphs.length; i++) {
-          await tx.paragraph.create({
-            data: {
-              bookId: newBook.id,
-              order: i + 1,
-              content: paragraphs[i],
-            },
-          });
-        }
-
-        return newBook;
+      // Check if user owns the book
+      const existingBook = await prisma.book.findUnique({
+        where: { id },
+        select: { userId: true },
       });
 
-      // Fetch the complete book with paragraphs
-      const completeBook = await prisma.book.findUnique({
-        where: { id: book.id },
+      if (!existingBook) {
+        return res.status(404).json({ error: 'Book not found' });
+      }
+
+      if (existingBook.userId !== req.user!.id) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const book = await prisma.book.update({
+        where: { id },
+        data: {
+          isPublic,
+          collectionId,
+          orderInCollection,
+          updatedBy: req.user!.id,
+          updatedAt: new Date(),
+        },
         include: {
-          paragraphs: {
-            orderBy: {
-              order: 'asc',
+          locales: true,
+          authors: {
+            include: {
+              author: true,
             },
           },
-          _count: {
-            select: {
-              paragraphs: true,
+          tags: {
+            include: {
+              tag: true,
             },
           },
         },
       });
 
-      // Include detection results in response
-      const response = {
-        ...completeBook,
-        detectionResults: {
-          detectedTitle: bookStructure.title,
-          detectedAuthor: bookStructure.author,
-          hasChapters: bookStructure.hasChapters,
-          chapterCount: bookStructure.chapters.length,
-          chapters: bookStructure.chapters.map(chapter => ({
-            title: chapter.title,
-            contentLength: chapter.content.length
-          })),
-          usedDetectedTitle: !req.body.title && !!bookStructure.title,
-          usedDetectedAuthor: !req.body.author && !!bookStructure.author,
-        }
-      };
-
-      res.status(201).json(response);
+      res.json({
+        message: 'Book updated successfully',
+        book,
+      });
     } catch (error) {
-      console.error('Error uploading book:', error);
+      console.error('Update book error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 );
 
-// Analyze book structure (preview without uploading)
+// Rate book
 router.post(
-  '/analyze',
+  '/:id/rate',
   authenticateToken,
-  // requireAdmin, // Temporarily disabled for testing
-  upload.single('file'),
-  async (req: AuthRequest, res) => {
+  async (req: AuthRequest, res: Response) => {
     try {
-      const file = req.file;
+      const { id } = req.params;
+      const { rating, comment } = req.body;
 
-      if (!file) {
-        return res.status(400).json({ error: 'File is required' });
+      if (rating < 1 || rating > 5) {
+        return res
+          .status(400)
+          .json({ error: 'Rating must be between 1 and 5' });
       }
 
-      let content: string;
-      let extractionMethod = 'traditional';
-
-      // Extract text based on file type
-      if (file.mimetype === 'application/pdf') {
-        // Configure AI extraction options
-        const aiConfig = {
-          enabled: process.env.ENABLE_AI_EXTRACTION === 'true',
-          fallbackThreshold: parseInt(process.env.AI_FALLBACK_THRESHOLD || '100'),
-          provider: (process.env.AI_PROVIDER as any) || 'openai',
-          apiKey: process.env.OPENAI_API_KEY
-        };
-
-        const extractionResult = await extractTextFromPDF(file.buffer, aiConfig);
-        content = extractionResult.text;
-        extractionMethod = extractionResult.method;
-
-        console.log(`PDF extraction completed using method: ${extractionMethod}`);
-      } else if (file.mimetype === 'text/plain') {
-        content = file.buffer.toString('utf-8');
-      } else {
-        return res.status(400).json({ error: 'Unsupported file type' });
-      }
-
-      // Analyze book structure
-      const bookStructure = analyzeBookStructure(content, extractionMethod);      // Get paragraph count for different processing methods
-      const standardParagraphs = splitIntoParagraphs(content);
-      const chapterBasedParagraphs = bookStructure.hasChapters
-        ? bookStructure.chapters
-          .flatMap(chapter => splitIntoParagraphs(chapter.content))
-          .filter(p => p.length > 20)
-        : [];
-
-      const analysis = {
-        fileName: file.originalname,
-        fileSize: file.size,
-        extractionMethod: bookStructure.extractionMethod || extractionMethod,
-        detectedTitle: bookStructure.title,
-        detectedAuthor: bookStructure.author,
-        hasChapters: bookStructure.hasChapters,
-        chapterCount: bookStructure.chapters.length,
-        textQuality: {
-          totalLength: content.length,
-          hasStructure: bookStructure.hasChapters,
-          confidence: content.length > 1000 ? 'high' : content.length > 100 ? 'medium' : 'low'
+      const bookRating = await prisma.bookRating.upsert({
+        where: {
+          userId_bookId: {
+            userId: req.user!.id,
+            bookId: id,
+          },
         },
-        chapters: bookStructure.chapters.map(chapter => ({
-          title: chapter.title,
-          contentLength: chapter.content.length,
-          paragraphCount: splitIntoParagraphs(chapter.content).length
-        })),
-        paragraphCounts: {
-          standard: standardParagraphs.length,
-          chapterBased: chapterBasedParagraphs.length
+        update: {
+          rating,
+          comment,
+          updatedAt: new Date(),
         },
-        contentPreview: content.substring(0, 500) + (content.length > 500 ? '...' : ''),
-        recommendations: {
-          useDetectedTitle: !!bookStructure.title,
-          useDetectedAuthor: !!bookStructure.author,
-          useChapterStructure: bookStructure.hasChapters && bookStructure.chapters.length > 1
-        }
-      };
-
-      res.json(analysis);
-    } catch (error) {
-      console.error('Error analyzing book:', error);
-
-      // Provide more specific error messages
-      let errorMessage = 'Failed to analyze file';
-      if (error instanceof Error) {
-        if (error.message.includes('PDF')) {
-          errorMessage = 'Failed to read PDF file. Please ensure the file is not corrupted.';
-        } else if (error.message.includes('parse')) {
-          errorMessage = 'Failed to parse file content. Please try a different file.';
-        } else {
-          errorMessage = `Analysis error: ${error.message}`;
-        }
-      }
-
-      res.status(500).json({
-        error: errorMessage,
-        details: process.env.NODE_ENV === 'development' ? error : undefined
+        create: {
+          userId: req.user!.id,
+          bookId: id,
+          rating,
+          comment,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              imageUrl: true,
+            },
+          },
+        },
       });
+
+      res.json({
+        message: 'Rating saved successfully',
+        rating: bookRating,
+      });
+    } catch (error) {
+      console.error('Rate book error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 );
 
-// Delete book
-router.delete('/:id', authenticateToken, async (req: AuthRequest, res) => {
+// Get book ratings
+router.get('/:id/ratings', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const { page = '1', limit = '10' } = req.query;
 
-    const book = await prisma.book.findFirst({
-      where: {
-        id,
-        userId: req.user!.id,
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const take = parseInt(limit as string);
+
+    const ratings = await prisma.bookRating.findMany({
+      where: { bookId: id },
+      skip,
+      take,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            imageUrl: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const totalRatings = await prisma.bookRating.count({
+      where: { bookId: id },
+    });
+
+    // Calculate average rating
+    const avgRating =
+      ratings.length > 0
+        ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+        : null;
+
+    res.json({
+      ratings,
+      averageRating: avgRating,
+      pagination: {
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+        total: totalRatings,
+        pages: Math.ceil(totalRatings / parseInt(limit as string)),
       },
     });
-
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
-
-    await prisma.book.delete({
-      where: { id },
-    });
-
-    res.json({ message: 'Book deleted successfully' });
   } catch (error) {
-    console.error('Error deleting book:', error);
+    console.error('Get book ratings error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Search books
-router.get(
-  '/search/:query',
+// Soft delete book
+router.delete(
+  '/:id',
   authenticateToken,
-  async (req: AuthRequest, res) => {
+  async (req: AuthRequest, res: Response) => {
     try {
-      const { query } = req.params;
+      const { id } = req.params;
 
-      const books = await prisma.book.findMany({
-        where: {
-          userId: req.user!.id,
-          OR: [
-            {
-              title: {
-                contains: query,
-                mode: 'insensitive',
-              },
-            },
-            {
-              author: {
-                contains: query,
-                mode: 'insensitive',
-              },
-            },
-          ],
-        },
-        include: {
-          _count: {
-            select: {
-              paragraphs: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'desc',
+      // Check if user owns the book
+      const existingBook = await prisma.book.findUnique({
+        where: { id },
+        select: { userId: true },
+      });
+
+      if (!existingBook) {
+        return res.status(404).json({ error: 'Book not found' });
+      }
+
+      if (existingBook.userId !== req.user!.id) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      await prisma.book.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+          updatedBy: req.user!.id,
         },
       });
 
-      res.json(books);
+      res.json({ message: 'Book deleted successfully' });
     } catch (error) {
-      console.error('Error searching books:', error);
+      console.error('Delete book error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

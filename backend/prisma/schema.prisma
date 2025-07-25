@@ -16,49 +16,294 @@ enum UserRole {
 }
 
 model User {
-  id        String     @id @default(uuid())
-  name      String
-  email     String     @unique
-  password  String
-  role      UserRole   @default(USER)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  books     Book[]
-  progress  Progress[]
+  id                String            @id @default(uuid())
+  name              String
+  email             String            @unique
+  password          String
+  role              UserRole          @default(USER)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  imageUrl          String?
+  books             Book[]
+  ownedCollections  Collection[]      @relation("OwnedCollections")
+  sharedCollections CollectionShare[]
+  sharedNotes       NoteShare[]
+  preferences       UserPreference[]
+  progress          Progress[]
+  notes             Note[]
+  bookRatings       BookRating[]
+  chapterRatings    ChapterRating[]
+  authorRatings     AuthorRating[]
+}
+
+model UserPreference {
+  id        String   @id @default(uuid())
+  userId    String
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+}
+
+model Collection {
+  id          String            @id @default(uuid())
+  name        String
+  description String?
+  ownerId     String?
+  isPublic    Boolean           @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  createdBy   String?
+  updatedBy   String?
+  owner       User?             @relation("OwnedCollections", fields: [ownerId], references: [id], onDelete: Cascade)
+  books       Book[]
+  sharedWith  CollectionShare[]
+}
+
+model CollectionShare {
+  collectionId String
+  userId       String
+  createdAt    DateTime   @default(now())
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, userId])
 }
 
 model Book {
-  id         String      @id @default(uuid())
-  title      String
-  author     String
-  userId     String?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  user       User?       @relation(fields: [userId], references: [id])
-  paragraphs Paragraph[]
-  progress   Progress[]
+  id                String       @id @default(uuid())
+  userId            String?
+  collectionId      String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  isPublic          Boolean      @default(false)
+  deletedAt         DateTime?
+  createdBy         String?
+  updatedBy         String?
+  orderInCollection Int?
+  user              User?        @relation(fields: [userId], references: [id])
+  collection        Collection?  @relation(fields: [collectionId], references: [id])
+  chapters          Chapter[]
+  tags              BookTag[]
+  ratings           BookRating[]
+  locales           BookLocale[]
+  authors           BookAuthor[]
+  Note              Note[]
 }
 
-model Paragraph {
-  id         String      @id @default(uuid())
-  bookId     String
-  order      Int
-  content    String
-  book       Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  progress   Progress[]
+model Tag {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  deletedAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  books       BookTag[]
+  chapters    ChapterTag[]
+  authors     AuthorTag[]
+  notes       NoteTag[]
+}
+
+model BookTag {
+  bookId String
+  tagId  String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([bookId, tagId])
+}
+
+model Chapter {
+  id        String          @id @default(uuid())
+  bookId    String
+  order     Int
+  deletedAt DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  createdBy String?
+  updatedBy String?
+  book      Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  notes     Note[]
+  progress  Progress[]
+  locales   ChapterLocale[]
+  tags      ChapterTag[]
+  ratings   ChapterRating[]
+}
+
+model ChapterLocale {
+  id        String  @id @default(uuid())
+  chapterId String
+  language  String // e.g. "en", "fr"
+  title     String?
+  content   String
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterId, language])
+}
+
+model BookLocale {
+  id       String  @id @default(uuid())
+  bookId   String
+  language String // e.g. "en", "fr"
+  title    String
+  imageUrl String?
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, language])
 }
 
 model Progress {
-  id          String    @id @default(uuid())
-  userId      String
-  bookId      String
-  paragraphId String
-  position    Int
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  user        User      @relation(fields: [userId], references: [id])
-  book        Book      @relation(fields: [bookId], references: [id])
-  paragraph   Paragraph @relation(fields: [paragraphId], references: [id])
+  id        String   @id @default(uuid())
+  userId    String
+  chapterId String
+  position  Int // e.g., character or word index in chapter
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id])
+  chapter Chapter @relation(fields: [chapterId], references: [id])
+
+  @@unique([userId, chapterId])
+}
+
+model Note {
+  id            String    @id @default(uuid())
+  userId        String
+  bookId        String?
+  chapterId     String
+  startIndex    Int
+  endIndex      Int
+  text          String
+  firstContent  String?
+  secondContent String?
+  thirdContent  String?
+  isPublic      Boolean   @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  createdBy     String?
+  updatedBy     String?
+
+  user       User        @relation(fields: [userId], references: [id])
+  book       Book?       @relation(fields: [bookId], references: [id])
+  chapter    Chapter?    @relation(fields: [chapterId], references: [id])
+  tags       NoteTag[]
+  sharedWith NoteShare[]
+}
+
+model NoteTag {
+  noteId String
+  tagId  String
+  note   Note   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+}
+
+model Author {
+  id        String         @id @default(uuid())
+  name      String
+  bio       String?
+  deletedAt DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  books     BookAuthor[]
+  tags      AuthorTag[]
+  links     AuthorLink[]
+  ratings   AuthorRating[]
+}
+
+model BookAuthor {
+  bookId   String
+  authorId String
+  book     Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  author   Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@id([bookId, authorId])
+}
+
+model ChapterTag {
+  chapterId String
+  tagId     String
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([chapterId, tagId])
+}
+
+model AuthorTag {
+  authorId String
+  tagId    String
+  author   Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([authorId, tagId])
+}
+
+model AuthorLink {
+  id       String  @id @default(uuid())
+  authorId String
+  url      String
+  label    String?
+  author   Author  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model BookRating {
+  id        String   @id @default(uuid())
+  userId    String
+  bookId    String
+  rating    Int // e.g. 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
 
   @@unique([userId, bookId])
+}
+
+model ChapterRating {
+  id        String   @id @default(uuid())
+  userId    String
+  chapterId String
+  rating    Int // e.g. 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chapterId])
+}
+
+model AuthorRating {
+  id        String   @id @default(uuid())
+  userId    String
+  authorId  String
+  rating    Int // e.g. 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  author Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, authorId])
+}
+
+model NoteShare {
+  noteId    String
+  userId    String
+  createdAt DateTime @default(now())
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, userId])
 }

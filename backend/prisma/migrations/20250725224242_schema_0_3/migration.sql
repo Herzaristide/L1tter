@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Note" ALTER COLUMN "firstContent" DROP NOT NULL,
+ALTER COLUMN "secondContent" DROP NOT NULL,
+ALTER COLUMN "thirdContent" DROP NOT NULL;
