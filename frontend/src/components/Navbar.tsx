@@ -55,7 +55,10 @@ const Navbar: React.FC = () => {
             className='flex items-center p-3 rounded-xl hover:bg-white/10 transition-all duration-200 group/item'
             onClick={() => setIsExpanded(false)}
           >
-            <div className='w-6 h-6 flex items-center justify-center'>L</div>
+            <div className='w-6 h-6 flex items-center justify-center'>📚</div>
+            <span className='ml-3 text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 lg:group-hover:block lg:hidden'>
+              Library
+            </span>
           </Link>
 
           {user?.role === 'ADMIN' && (
@@ -79,6 +82,9 @@ const Navbar: React.FC = () => {
                   />
                 </svg>
               </div>
+              <span className='ml-3 text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 lg:group-hover:block lg:hidden'>
+                Upload
+              </span>
             </Link>
           )}
         </div>

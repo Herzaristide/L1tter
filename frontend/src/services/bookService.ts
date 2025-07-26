@@ -2,58 +2,53 @@ import api from './api';
 import { Book } from '../types';
 
 export const bookService = {
-  getBooks: async (): Promise<Book[]> => {
-    const response = await api.get('/books');
+  getBooks: async (params: any = {}): Promise<Book[]> => {
+    // Supports search, filter, pagination
+    const response = await api.get('/books', { params });
+    return response.data.books || response.data;
+  },
+
+  getBook: async (id: string, params: any = {}): Promise<Book> => {
+    const response = await api.get(`/books/${id}`, { params });
     return response.data;
   },
 
-  getBook: async (id: string): Promise<Book> => {
-    const response = await api.get(`/books/${id}`);
-    return response.data;
+  createBook: async (data: any): Promise<Book> => {
+    // data: { title, language, imageUrl, collectionId, isPublic, authorIds, tagIds, chapters }
+    const response = await api.post('/books', data);
+    return response.data.book || response.data;
   },
 
-  createBook: async (
-    title: string,
-    author: string,
-    content: string
-  ): Promise<Book> => {
-    const response = await api.post('/books', { title, author, content });
-    return response.data;
-  },
-
-  uploadBookFile: async (
-    title: string,
-    author: string,
-    file: File
-  ): Promise<Book> => {
+  uploadBookFile: async (data: {
+    title: string;
+    author: string;
+    file: File;
+  }): Promise<Book> => {
     const formData = new FormData();
-    formData.append('title', title);
-    formData.append('author', author);
-    formData.append('file', file);
-
+    formData.append('title', data.title);
+    formData.append('author', data.author);
+    formData.append('file', data.file);
     const response = await api.post('/books/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
-    return response.data;
+    return response.data.book || response.data;
   },
 
   deleteBook: async (id: string): Promise<void> => {
     await api.delete(`/books/${id}`);
   },
 
-  searchBooks: async (query: string): Promise<Book[]> => {
-    const response = await api.get(
-      `/books/search/${encodeURIComponent(query)}`
-    );
-    return response.data;
+  searchBooks: async (params: any = {}): Promise<Book[]> => {
+    // Use /books endpoint with search param
+    const response = await api.get('/books', { params });
+    return response.data.books || response.data;
   },
 
   analyzeBookFile: async (file: File): Promise<any> => {
     const formData = new FormData();
     formData.append('file', file);
-
     const response = await api.post('/books/analyze', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

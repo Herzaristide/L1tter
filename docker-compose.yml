@@ -32,6 +32,23 @@ services:
     depends_on:
       - postgres
 
+  meilisearch:
+    image: getmeili/meilisearch:v1.8
+    container_name: l1tter-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_NO_ANALYTICS: 'true'
+      MEILI_MASTER_KEY: 'masterKey'
+    ports:
+      - "7700:7700"
+    networks:
+      - l1tter-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
     driver: local

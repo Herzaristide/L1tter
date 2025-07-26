@@ -8,20 +8,16 @@ import {
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import AdminRoute from './components/AdminRoute';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Library from './pages/Library';
-import UploadBook from './pages/UploadBook';
-import Reader from './pages/Reader';
-
+import Dashboard from './pages/Dashboard';
 const AppRoutes: React.FC = () => {
   const { isAuthenticated } = useAuth();
 
   return (
     <div className='h-screen w-screen bg-white dark:bg-black text-black dark:text-white'>
-      {isAuthenticated && <Navbar />}
+      {/* {isAuthenticated && <Navbar />} */}
 
       <main className='px-8 lg:px-40 h-screen w-screen'>
         <Routes>
@@ -39,31 +35,7 @@ const AppRoutes: React.FC = () => {
             path='/'
             element={
               <ProtectedRoute>
-                <Library />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path='/upload'
-            element={
-              <AdminRoute>
-                <UploadBook />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path='/read/:bookId'
-            element={
-              <ProtectedRoute>
-                <Reader />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path='/read/:bookId/:paragraphId'
-            element={
-              <ProtectedRoute>
-                <Reader />
+                <Dashboard />
               </ProtectedRoute>
             }
           />
