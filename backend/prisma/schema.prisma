@@ -62,6 +62,11 @@ model Collection {
   owner       User?             @relation("OwnedCollections", fields: [ownerId], references: [id], onDelete: Cascade)
   books       Book[]
   sharedWith  CollectionShare[]
+
+  @@index([ownerId])
+  @@index([isPublic])
+  @@index([deletedAt])
+  @@index([name])
 }
 
 model CollectionShare {
@@ -76,8 +81,21 @@ model CollectionShare {
 
 model Book {
   id                String       @id @default(uuid())
+  workId            String?       // Identifier for grouping editions/languages of same work
   userId            String?
   collectionId      String?
+  publisherId       String?
+  title             String
+  description       String?
+  edition           String?
+  editionPublished  Int?
+  originalLanguage  String       @default("en")
+  originalPublished Int?
+  imageUrl          String?
+  shoppingUrl       String?
+  language          String       @default("en") // e.g. "en", "fr"
+  slug              String?      @unique // SEO-friendly URL
+  genre             String?      // Book categorization
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   isPublic          Boolean      @default(false)
@@ -87,12 +105,32 @@ model Book {
   orderInCollection Int?
   user              User?        @relation(fields: [userId], references: [id])
   collection        Collection?  @relation(fields: [collectionId], references: [id])
+  publisher         Publisher?   @relation(fields: [publisherId], references: [id])
   chapters          Chapter[]
   tags              BookTag[]
   ratings           BookRating[]
-  locales           BookLocale[]
   authors           BookAuthor[]
   Note              Note[]
+
+  @@index([workId])
+  @@index([userId])
+  @@index([collectionId])
+  @@index([publisherId])
+  @@index([deletedAt])
+  @@index([isPublic])
+  @@index([language])
+  @@index([originalLanguage])
+  @@index([createdAt])
+  @@index([title])
+  @@index([genre])
+  @@index([editionPublished])
+  @@index([originalPublished])
+  // Composite indexes for common query patterns
+  @@index([workId, language]) // All editions of a work in specific language
+  @@index([userId, deletedAt]) // User's books
+  @@index([isPublic, deletedAt]) // Public books
+  @@index([language, isPublic]) // Books by language
+  @@index([publisherId, editionPublished]) // Books by publisher and year
 }
 
 model Tag {
@@ -106,6 +144,9 @@ model Tag {
   chapters    ChapterTag[]
   authors     AuthorTag[]
   notes       NoteTag[]
+
+  @@index([name])
+  @@index([deletedAt])
 }
 
 model BookTag {
@@ -118,57 +159,46 @@ model BookTag {
 }
 
 model Chapter {
-  id        String          @id @default(uuid())
-  bookId    String
-  order     Int
-  deletedAt DateTime?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  createdBy String?
-  updatedBy String?
-  book      Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  notes     Note[]
-  progress  Progress[]
-  locales   ChapterLocale[]
-  tags      ChapterTag[]
-  ratings   ChapterRating[]
+  id              String          @id @default(uuid())
+  bookId          String
+  title           String?
+  content         String
+  order           Int
+  readingTimeEst  Int?            // Estimated reading time in minutes
+  deletedAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  createdBy       String?
+  updatedBy       String?
+  book            Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  notes           Note[]
+  progress        Progress[]
+  tags            ChapterTag[]
+  ratings         ChapterRating[]
+
+  @@index([bookId])
+  @@index([order])
+  @@index([deletedAt])
+  @@index([bookId, order]) // Composite for chapter ordering
 }
 
-model ChapterLocale {
-  id        String  @id @default(uuid())
-  chapterId String
-  language  String // e.g. "en", "fr"
-  title     String?
-  content   String
-
-  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-
-  @@unique([chapterId, language])
-}
-
-model BookLocale {
-  id       String  @id @default(uuid())
-  bookId   String
-  language String // e.g. "en", "fr"
-  title    String
-  imageUrl String?
-
-  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
-
-  @@unique([bookId, language])
-}
 
 model Progress {
   id        String   @id @default(uuid())
   userId    String
   chapterId String
   position  Int // e.g., character or word index in chapter
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user    User    @relation(fields: [userId], references: [id])
   chapter Chapter @relation(fields: [chapterId], references: [id])
 
   @@unique([userId, chapterId])
+  @@index([userId])
+  @@index([chapterId])
+  @@index([updatedAt])
+  @@index([userId, updatedAt]) // Recent reading activity
 }
 
 model Note {
@@ -194,6 +224,13 @@ model Note {
   chapter    Chapter?    @relation(fields: [chapterId], references: [id])
   tags       NoteTag[]
   sharedWith NoteShare[]
+
+  @@index([userId])
+  @@index([bookId])
+  @@index([chapterId])
+  @@index([deletedAt])
+  @@index([isPublic])
+  @@index([createdAt])
 }
 
 model NoteTag {
@@ -216,15 +253,38 @@ model Author {
   tags      AuthorTag[]
   links     AuthorLink[]
   ratings   AuthorRating[]
+
+  @@index([name])
+  @@index([deletedAt])
+}
+
+model Publisher {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  website     String?
+  address     String?
+  foundedYear Int?
+  country     String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  books       Book[]
+
+  @@index([name])
+  @@index([country])
+  @@index([deletedAt])
 }
 
 model BookAuthor {
   bookId   String
   authorId String
+  position Int?   // Order of authors if it matters (primary author = 1, etc.)
   book     Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
   author   Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@id([bookId, authorId])
+  @@index([bookId, position]) // For ordered author listing
 }
 
 model ChapterTag {
@@ -266,6 +326,9 @@ model BookRating {
   book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
 
   @@unique([userId, bookId])
+  @@index([bookId])
+  @@index([rating])
+  @@index([createdAt])
 }
 
 model ChapterRating {
@@ -281,6 +344,9 @@ model ChapterRating {
   chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
 
   @@unique([userId, chapterId])
+  @@index([chapterId])
+  @@index([rating])
+  @@index([createdAt])
 }
 
 model AuthorRating {
@@ -296,6 +362,9 @@ model AuthorRating {
   author Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@unique([userId, authorId])
+  @@index([authorId])
+  @@index([rating])
+  @@index([createdAt])
 }
 
 model NoteShare {

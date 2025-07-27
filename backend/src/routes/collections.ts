@@ -41,9 +41,30 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         books: {
           where: { deletedAt: null },
           include: {
-            locales: {
-              where: { language: 'en' },
-              take: 1,
+            authors: {
+              include: {
+                author: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+            tags: {
+              include: {
+                tag: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+            ratings: {
+              select: {
+                rating: true,
+              },
             },
             _count: {
               select: {
@@ -111,10 +132,6 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         books: {
           where: { deletedAt: null },
           include: {
-            locales: {
-              where: { language: language as string },
-              take: 1,
-            },
             authors: {
               include: {
                 author: {
@@ -184,10 +201,10 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     }
 
     // Calculate average ratings for books
-    const booksWithRatings = collection.books.map((book) => {
+    const booksWithRatings = collection.books.map((book: any) => {
       const avgRating =
         book.ratings.length > 0
-          ? book.ratings.reduce((sum, r) => sum + r.rating, 0) /
+          ? book.ratings.reduce((sum: any, r: any) => sum + r.rating, 0) /
             book.ratings.length
           : null;
 

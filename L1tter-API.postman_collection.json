@@ -1,171 +1,420 @@
 {
   "info": {
-    "_postman_id": "l1tter-api-collection-2025",
     "name": "L1tter API",
+    "description": "Postman collection for testing all L1tter API endpoints.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Postman collection for L1tter API endpoints."
+    "version": "1.0.0"
   },
   "item": [
     {
-      "name": "Auth - Register",
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password123\"\n}"
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
         },
-        "url": {
-          "raw": "http://localhost:3001/api/auth/register",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "auth", "register"]
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
         }
-      }
+      ]
     },
     {
-      "name": "Auth - Login",
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password123\"\n}"
+      "name": "Books",
+      "item": [
+        {
+          "name": "Get All Books",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/books",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "books"]
+            }
+          }
         },
-        "url": {
-          "raw": "http://localhost:3001/api/auth/login",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "auth", "login"]
-        }
-      }
-    },
-    {
-      "name": "Books - Get All",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:3001/api/books",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "books"]
-        }
-      }
-    },
-    {
-      "name": "Books - Create",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "Authorization", "value": "Bearer {{token}}" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"title\": \"Sample Book\",\n  \"language\": \"en\",\n  \"isPublic\": true,\n  \"authorIds\": [],\n  \"tagIds\": [],\n  \"chapters\": []\n}"
+        {
+          "name": "Get Book By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/books/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "books", ":id"]
+            }
+          }
         },
-        "url": {
-          "raw": "http://localhost:3001/api/books",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "books"]
+        {
+          "name": "Create Book",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"New Book\",\n  \"language\": \"en\",\n  \"genre\": \"Fiction\",\n  \"isPublic\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/books",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "books"]
+            }
+          }
+        },
+        {
+          "name": "Update Book",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Book Title\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/books/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "books", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Delete Book",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/books/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "books", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Rate Book",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"comment\": \"Excellent!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/books/:id/rate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "books", ":id", "rate"]
+            }
+          }
+        },
+        {
+          "name": "Get Book Ratings",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/books/:id/ratings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "books", ":id", "ratings"]
+            }
+          }
+        },
+        {
+          "name": "Get Editions of a Work",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/books/work/:workId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "books", "work", ":workId"]
+            }
+          }
         }
-      }
+      ]
     },
     {
-      "name": "Collections - Get All",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:3001/api/collections",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "collections"]
+      "name": "Authors",
+      "item": [
+        {
+          "name": "Get All Authors",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/authors",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "authors"]
+            }
+          }
+        },
+        {
+          "name": "Get Author By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/authors/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "authors", ":id"]
+            }
+          }
         }
-      }
+      ]
     },
     {
-      "name": "Authors - Get All",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:3001/api/authors",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "authors"]
+      "name": "Publishers",
+      "item": [
+        {
+          "name": "Get All Publishers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/publishers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "publishers"]
+            }
+          }
+        },
+        {
+          "name": "Get Publisher By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/publishers/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "publishers", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Create Publisher",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Publisher\",\n  \"country\": \"USA\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/publishers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "publishers"]
+            }
+          }
+        },
+        {
+          "name": "Update Publisher",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Publisher\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/publishers/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "publishers", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Delete Publisher",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/publishers/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "publishers", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Get Publisher's Books",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/publishers/:id/books",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "publishers", ":id", "books"]
+            }
+          }
         }
-      }
+      ]
     },
     {
-      "name": "Notes - Get All (Auth)",
-      "request": {
-        "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-        "url": {
-          "raw": "http://localhost:3001/api/notes",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "notes"]
+      "name": "Collections",
+      "item": [
+        {
+          "name": "Get All Collections",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/collections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "collections"]
+            }
+          }
+        },
+        {
+          "name": "Get Collection By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/collections/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "collections", ":id"]
+            }
+          }
         }
-      }
+      ]
     },
     {
-      "name": "Progress - Get All (Auth)",
-      "request": {
-        "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-        "url": {
-          "raw": "http://localhost:3001/api/progress",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "progress"]
+      "name": "Tags",
+      "item": [
+        {
+          "name": "Get All Tags",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/tags",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tags"]
+            }
+          }
         }
-      }
+      ]
     },
     {
-      "name": "Tags - Get All",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:3001/api/tags",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "tags"]
+      "name": "Notes",
+      "item": [
+        {
+          "name": "Get All Notes",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/notes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notes"]
+            }
+          }
         }
-      }
+      ]
     },
     {
-      "name": "Preferences - Get All (Auth)",
-      "request": {
-        "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-        "url": {
-          "raw": "http://localhost:3001/api/preferences",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3001",
-          "path": ["api", "preferences"]
+      "name": "Progress",
+      "item": [
+        {
+          "name": "Get All Progress",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/progress",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "progress"]
+            }
+          }
         }
-      }
+      ]
+    },
+    {
+      "name": "Preferences",
+      "item": [
+        {
+          "name": "Get All Preferences",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/preferences",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "preferences"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Universal Search",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/search?q=Gatsby",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search"],
+              "query": [{ "key": "q", "value": "Gatsby" }]
+            }
+          }
+        },
+        {
+          "name": "Search Within Book",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/search/books/:bookId?q=Gatsby",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search", "books", ":bookId"],
+              "query": [{ "key": "q", "value": "Gatsby" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            }
+          }
+        }
+      ]
     }
   ],
   "variable": [
-    {
-      "key": "token",
-      "value": ""
-    }
+    { "key": "baseUrl", "value": "http://localhost:3001" },
+    { "key": "token", "value": "" }
   ]
 }

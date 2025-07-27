@@ -42,19 +42,32 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         books: {
           include: {
             book: {
-              include: {
-                locales: {
-                  where: { language: 'en' },
-                  take: 1,
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                language: true,
+                genre: true,
+                imageUrl: true,
+                isPublic: true,
+                editionPublished: true,
+                deletedAt: true,
+                publisher: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+                ratings: {
+                  select: { rating: true },
                 },
                 _count: {
-                  select: {
-                    ratings: true,
-                  },
+                  select: { ratings: true },
                 },
               },
             },
           },
+          orderBy: { position: 'asc' },
         },
         tags: {
           include: {
@@ -119,17 +132,33 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { language = 'en' } = req.query;
+    const { language } = req.query;
 
-    const author = await prisma.author.findUnique({
-      where: { id },
+    const author = await prisma.author.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+      },
       include: {
         books: {
           include: {
             book: {
-              include: {
-                locales: {
-                  where: { language: language as string },
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                language: true,
+                genre: true,
+                imageUrl: true,
+                isPublic: true,
+                editionPublished: true,
+                deletedAt: true,
+                publisher: {
+                  select: {
+                    id: true,
+                    name: true,
+                    country: true,
+                  },
                 },
                 tags: {
                   include: {
@@ -142,15 +171,10 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
                   },
                 },
                 ratings: {
-                  select: {
-                    rating: true,
-                  },
+                  select: { rating: true },
                 },
                 _count: {
-                  select: {
-                    chapters: true,
-                    ratings: true,
-                  },
+                  select: { chapters: true, ratings: true },
                 },
               },
             },
@@ -189,23 +213,24 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     // Calculate average rating
     const avgRating =
-      author.ratings.length > 0
+      Array.isArray(author.ratings) && author.ratings.length > 0
         ? author.ratings.reduce((sum: number, r: any) => sum + r.rating, 0) /
           author.ratings.length
         : null;
 
     // Filter non-deleted books and calculate average ratings
-    const nonDeletedBooks = author.books.filter(
-      (bookAuthor) => !bookAuthor.book.deletedAt
-    );
+    const nonDeletedBooks = Array.isArray(author.books)
+      ? author.books.filter(
+          (bookAuthor) => bookAuthor.book && !bookAuthor.book.deletedAt
+        )
+      : [];
     const booksWithRatings = nonDeletedBooks.map((bookAuthor: any) => {
       const book = bookAuthor.book;
       const bookAvgRating =
-        book.ratings.length > 0
+        Array.isArray(book.ratings) && book.ratings.length > 0
           ? book.ratings.reduce((sum: number, r: any) => sum + r.rating, 0) /
             book.ratings.length
           : null;
-
       const { ratings, ...bookWithoutRatings } = book;
       return {
         ...bookAuthor,

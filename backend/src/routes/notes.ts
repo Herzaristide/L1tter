@@ -70,26 +70,12 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         book: {
           select: {
             id: true,
-            locales: {
-              where: { language: 'en' },
-              take: 1,
-              select: {
-                title: true,
-              },
-            },
           },
         },
         chapter: {
           select: {
             id: true,
             order: true,
-            locales: {
-              where: { language: 'en' },
-              take: 1,
-              select: {
-                title: true,
-              },
-            },
           },
         },
         tags: {
@@ -167,20 +153,12 @@ router.get(
           book: {
             select: {
               id: true,
-              locales: {
-                where: { language: 'en' },
-                take: 1,
-              },
             },
           },
           chapter: {
             select: {
               id: true,
               order: true,
-              locales: {
-                where: { language: 'en' },
-                take: 1,
-              },
             },
           },
           tags: {
@@ -289,20 +267,12 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         book: {
           select: {
             id: true,
-            locales: {
-              where: { language: 'en' },
-              take: 1,
-            },
           },
         },
         chapter: {
           select: {
             id: true,
             order: true,
-            locales: {
-              where: { language: 'en' },
-              take: 1,
-            },
           },
         },
         tags: {
@@ -367,20 +337,12 @@ router.put(
           book: {
             select: {
               id: true,
-              locales: {
-                where: { language: 'en' },
-                take: 1,
-              },
             },
           },
           chapter: {
             select: {
               id: true,
               order: true,
-              locales: {
-                where: { language: 'en' },
-                take: 1,
-              },
             },
           },
           tags: {

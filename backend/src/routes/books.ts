@@ -10,10 +10,13 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const {
       search,
-      language = 'en',
+      language,
+      workId,
+      publisherId,
       tag,
       author,
       collection,
+      genre,
       isPublic,
       page = '1',
       limit = '10',
@@ -22,22 +25,19 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const take = parseInt(limit as string);
 
-    const where: any = {
-      ...(isPublic === 'true' ? { isPublic: true } : {}),
-      ...(collection ? { collectionId: collection as string } : {}),
-      deletedAt: null,
-    };
-
-    // Search in book locales
+    const where: any = { deletedAt: null };
+    if (isPublic === 'true') where.isPublic = true;
+    if (collection) where.collectionId = collection as string;
+    if (workId) where.workId = workId as string;
+    if (publisherId) where.publisherId = publisherId as string;
+    if (language) where.language = language as string;
+    if (genre) where.genre = { contains: genre as string, mode: 'insensitive' };
     if (search) {
-      where.locales = {
-        some: {
-          OR: [{ title: { contains: search as string, mode: 'insensitive' } }],
-        },
-      };
+      where.OR = [
+        { title: { contains: search as string, mode: 'insensitive' } },
+        { description: { contains: search as string, mode: 'insensitive' } },
+      ];
     }
-
-    // Filter by author
     if (author) {
       where.authors = {
         some: {
@@ -47,8 +47,6 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         },
       };
     }
-
-    // Filter by tag
     if (tag) {
       where.tags = {
         some: {
@@ -64,78 +62,39 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       skip,
       take,
       include: {
-        locales: {
-          where: { language: language as string },
-          take: 1,
-        },
         authors: {
           include: {
             author: {
-              select: {
-                id: true,
-                name: true,
-                bio: true,
-              },
+              select: { id: true, name: true, bio: true },
             },
           },
+          orderBy: { position: 'asc' },
         },
+        publisher: { select: { id: true, name: true, country: true } },
         tags: {
           include: {
-            tag: {
-              select: {
-                id: true,
-                name: true,
-                description: true,
-              },
-            },
+            tag: { select: { id: true, name: true, description: true } },
           },
         },
-        collection: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            imageUrl: true,
-          },
-        },
-        ratings: {
-          select: {
-            rating: true,
-          },
-        },
-        _count: {
-          select: {
-            chapters: true,
-            ratings: true,
-          },
-        },
+        collection: { select: { id: true, name: true, description: true } },
+        user: { select: { id: true, name: true, imageUrl: true } },
+        ratings: { select: { rating: true } },
+        _count: { select: { chapters: true, ratings: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Calculate average ratings
     const booksWithRatings = books.map((book) => {
       const avgRating =
         book.ratings.length > 0
-          ? book.ratings.reduce((sum, r) => sum + r.rating, 0) /
+          ? book.ratings.reduce((sum: any, r: any) => sum + r.rating, 0) /
             book.ratings.length
           : null;
-
       const { ratings, ...bookWithoutRatings } = book;
-      return {
-        ...bookWithoutRatings,
-        averageRating: avgRating,
-      };
+      return { ...bookWithoutRatings, averageRating: avgRating };
     });
 
     const totalBooks = await prisma.book.count({ where });
-
     res.json({
       books: booksWithRatings,
       pagination: {
@@ -151,278 +110,300 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Get single book by ID
+// Get book by ID
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { language = 'en' } = req.query;
-
-    const book = await prisma.book.findUnique({
-      where: { id },
+    const { chapterId } = req.query;
+    if (chapterId) {
+      // Fetch a single chapter for this book
+      const chapter = await prisma.chapter.findFirst({
+        where: { id: chapterId as string, bookId: id, deletedAt: null },
+        select: {
+          id: true,
+          title: true,
+          content: true,
+          order: true,
+          readingTimeEst: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+      return res.json(chapter);
+    }
+    // Default: fetch book with all chapters
+    const book = await prisma.book.findFirst({
+      where: { id, deletedAt: null },
       include: {
-        locales: true,
         authors: {
           include: {
             author: {
               include: {
                 links: true,
-                tags: {
-                  include: {
-                    tag: true,
-                  },
-                },
+                ratings: { select: { rating: true } },
               },
             },
           },
+          orderBy: { position: 'asc' },
         },
+        publisher: true,
         chapters: {
           where: { deletedAt: null },
-          include: {
-            locales: {
-              where: { language: language as string },
-            },
-            _count: {
-              select: {
-                notes: true,
-              },
-            },
+          select: {
+            id: true,
+            title: true,
+            content: true,
+            order: true,
+            readingTimeEst: true,
+            createdAt: true,
           },
           orderBy: { order: 'asc' },
         },
-        tags: {
-          include: {
-            tag: true,
-          },
-        },
+        tags: { include: { tag: true } },
         collection: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            isPublic: true,
-          },
+          select: { id: true, name: true, description: true, isPublic: true },
         },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            imageUrl: true,
-          },
-        },
+        user: { select: { id: true, name: true, imageUrl: true } },
         ratings: {
           include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                imageUrl: true,
-              },
-            },
+            user: { select: { id: true, name: true, imageUrl: true } },
           },
           orderBy: { createdAt: 'desc' },
         },
-        _count: {
-          select: {
-            chapters: true,
-            ratings: true,
-            Note: true,
-          },
-        },
+        _count: { select: { chapters: true, ratings: true, Note: true } },
       },
     });
-
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
-
-    // Check if book is accessible (public or user owns it)
-    if (!book.isPublic && book.userId !== req.user?.id) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    // Calculate average rating
+    if (!book) return res.status(404).json({ error: 'Book not found' });
     const avgRating =
       book.ratings.length > 0
-        ? book.ratings.reduce((sum, r) => sum + r.rating, 0) /
+        ? book.ratings.reduce((sum: any, r: any) => sum + r.rating, 0) /
           book.ratings.length
         : null;
-
-    res.json({
-      ...book,
-      averageRating: avgRating,
-    });
+    res.json({ ...book, averageRating: avgRating });
   } catch (error) {
     console.error('Get book error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Create new book
+// Get all editions of a work
+router.get('/work/:workId', async (req: AuthRequest, res: Response) => {
+  try {
+    const { workId } = req.params;
+    const { language } = req.query;
+    const where: any = { workId, deletedAt: null };
+    if (language) where.language = language as string;
+    const editions = await prisma.book.findMany({
+      where,
+      include: {
+        authors: {
+          include: { author: { select: { id: true, name: true } } },
+          orderBy: { position: 'asc' },
+        },
+        publisher: { select: { id: true, name: true, country: true } },
+        ratings: { select: { rating: true } },
+        _count: { select: { chapters: true, ratings: true } },
+      },
+      orderBy: [{ language: 'asc' }, { editionPublished: 'desc' }],
+    });
+    const editionsWithRatings = editions.map((edition) => {
+      const avgRating =
+        edition.ratings.length > 0
+          ? edition.ratings.reduce((sum: any, r: any) => sum + r.rating, 0) /
+            edition.ratings.length
+          : null;
+      const { ratings, ...editionWithoutRatings } = edition;
+      return { ...editionWithoutRatings, averageRating: avgRating };
+    });
+    res.json({
+      workId,
+      editions: editionsWithRatings,
+      totalEditions: editions.length,
+      languages: [...new Set(editions.map((e) => e.language))],
+    });
+  } catch (error) {
+    console.error('Get work editions error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create a new book
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const {
-      title,
-      language = 'en',
-      imageUrl,
+      workId,
       collectionId,
+      publisherId,
+      title,
+      description,
+      edition,
+      editionPublished,
+      originalLanguage,
+      originalPublished,
+      imageUrl,
+      language = 'en',
+      slug,
+      genre,
       isPublic = false,
       authorIds = [],
       tagIds = [],
-      chapters = [],
     } = req.body;
-
-    const book = await prisma.$transaction(async (tx) => {
-      // Create book
-      const newBook = await tx.book.create({
-        data: {
-          userId: req.user!.id,
-          collectionId,
-          isPublic,
-          createdBy: req.user!.id,
-        },
-      });
-
-      // Create book locale
-      await tx.bookLocale.create({
-        data: {
-          bookId: newBook.id,
-          language,
-          title,
-          imageUrl,
-        },
-      });
-
-      // Connect authors
-      if (authorIds.length > 0) {
-        await tx.bookAuthor.createMany({
-          data: authorIds.map((authorId: string) => ({
-            bookId: newBook.id,
-            authorId,
-          })),
-        });
-      }
-
-      // Connect tags
-      if (tagIds.length > 0) {
-        await tx.bookTag.createMany({
-          data: tagIds.map((tagId: string) => ({
-            bookId: newBook.id,
-            tagId,
-          })),
-        });
-      }
-
-      // Create chapters if provided
-      if (chapters.length > 0) {
-        for (let i = 0; i < chapters.length; i++) {
-          const chapter = chapters[i];
-          const newChapter = await tx.chapter.create({
-            data: {
-              bookId: newBook.id,
-              order: i + 1,
-              createdBy: req.user!.id,
-            },
-          });
-
-          await tx.chapterLocale.create({
-            data: {
-              chapterId: newChapter.id,
-              language,
-              title: chapter.title || `Chapter ${i + 1}`,
-              content: chapter.content,
-            },
-          });
-        }
-      }
-
-      return newBook;
+    if (!title) return res.status(400).json({ error: 'Title is required' });
+    const book = await prisma.book.create({
+      data: {
+        workId,
+        userId: req.user!.id,
+        collectionId,
+        publisherId,
+        title,
+        description,
+        edition,
+        editionPublished: editionPublished ? parseInt(editionPublished) : null,
+        originalLanguage: originalLanguage || language,
+        originalPublished: originalPublished
+          ? parseInt(originalPublished)
+          : null,
+        imageUrl,
+        language,
+        slug,
+        genre,
+        isPublic,
+        createdBy: req.user!.id,
+      },
     });
-
-    // Fetch complete book data
+    if (authorIds.length > 0) {
+      await prisma.bookAuthor.createMany({
+        data: authorIds.map((authorId: string, index: number) => ({
+          bookId: book.id,
+          authorId,
+          position: index + 1,
+        })),
+      });
+    }
+    if (tagIds.length > 0) {
+      await prisma.bookTag.createMany({
+        data: tagIds.map((tagId: string) => ({ bookId: book.id, tagId })),
+      });
+    }
     const completeBook = await prisma.book.findUnique({
       where: { id: book.id },
       include: {
-        locales: true,
-        authors: {
-          include: {
-            author: true,
-          },
-        },
-        tags: {
-          include: {
-            tag: true,
-          },
-        },
-        chapters: {
-          include: {
-            locales: true,
-          },
-          orderBy: { order: 'asc' },
-        },
+        authors: { include: { author: true }, orderBy: { position: 'asc' } },
+        publisher: true,
+        tags: { include: { tag: true } },
+        collection: true,
+        user: { select: { id: true, name: true, imageUrl: true } },
       },
     });
-
-    res.status(201).json({
-      message: 'Book created successfully',
-      book: completeBook,
-    });
+    res.status(201).json(completeBook);
   } catch (error) {
     console.error('Create book error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Update book
+// Update a book
 router.put(
   '/:id',
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const { isPublic, collectionId, orderInCollection } = req.body;
-
-      // Check if user owns the book
-      const existingBook = await prisma.book.findUnique({
-        where: { id },
-        select: { userId: true },
+      const {
+        workId,
+        collectionId,
+        publisherId,
+        title,
+        description,
+        edition,
+        editionPublished,
+        originalLanguage,
+        originalPublished,
+        imageUrl,
+        language,
+        slug,
+        genre,
+        isPublic,
+        authorIds,
+        tagIds,
+      } = req.body;
+      const book = await prisma.book.findFirst({
+        where: { id, deletedAt: null },
       });
-
-      if (!existingBook) {
-        return res.status(404).json({ error: 'Book not found' });
+      if (!book) return res.status(404).json({ error: 'Book not found' });
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+      });
+      if (!user || (book.userId !== req.user!.id && user.role !== 'ADMIN')) {
+        return res
+          .status(403)
+          .json({ error: 'Not authorized to edit this book' });
       }
-
-      if (existingBook.userId !== req.user!.id) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-
-      const book = await prisma.book.update({
+      const updatedBook = await prisma.book.update({
         where: { id },
         data: {
-          isPublic,
-          collectionId,
-          orderInCollection,
+          workId: workId !== undefined ? workId : book.workId,
+          collectionId:
+            collectionId !== undefined ? collectionId : book.collectionId,
+          publisherId:
+            publisherId !== undefined ? publisherId : book.publisherId,
+          title: title || book.title,
+          description:
+            description !== undefined ? description : book.description,
+          edition: edition !== undefined ? edition : book.edition,
+          editionPublished:
+            editionPublished !== undefined
+              ? editionPublished
+                ? parseInt(editionPublished)
+                : null
+              : book.editionPublished,
+          originalLanguage: originalLanguage || book.originalLanguage,
+          originalPublished:
+            originalPublished !== undefined
+              ? originalPublished
+                ? parseInt(originalPublished)
+                : null
+              : book.originalPublished,
+          imageUrl: imageUrl !== undefined ? imageUrl : book.imageUrl,
+          language: language || book.language,
+          slug: slug !== undefined ? slug : book.slug,
+          genre: genre !== undefined ? genre : book.genre,
+          isPublic: isPublic !== undefined ? isPublic : book.isPublic,
           updatedBy: req.user!.id,
-          updatedAt: new Date(),
         },
+      });
+      if (authorIds !== undefined) {
+        await prisma.bookAuthor.deleteMany({ where: { bookId: id } });
+        if (authorIds.length > 0) {
+          await prisma.bookAuthor.createMany({
+            data: authorIds.map((authorId: string, index: number) => ({
+              bookId: id,
+              authorId,
+              position: index + 1,
+            })),
+          });
+        }
+      }
+      if (tagIds !== undefined) {
+        await prisma.bookTag.deleteMany({ where: { bookId: id } });
+        if (tagIds.length > 0) {
+          await prisma.bookTag.createMany({
+            data: tagIds.map((tagId: string) => ({ bookId: id, tagId })),
+          });
+        }
+      }
+      const completeBook = await prisma.book.findUnique({
+        where: { id },
         include: {
-          locales: true,
-          authors: {
-            include: {
-              author: true,
-            },
-          },
-          tags: {
-            include: {
-              tag: true,
-            },
-          },
+          authors: { include: { author: true }, orderBy: { position: 'asc' } },
+          publisher: true,
+          tags: { include: { tag: true } },
+          collection: true,
+          user: { select: { id: true, name: true, imageUrl: true } },
         },
       });
-
-      res.json({
-        message: 'Book updated successfully',
-        book,
-      });
+      res.json(completeBook);
     } catch (error) {
       console.error('Update book error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -430,7 +411,38 @@ router.put(
   }
 );
 
-// Rate book
+// Delete a book (soft delete)
+router.delete(
+  '/:id',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const book = await prisma.book.findFirst({
+        where: { id, deletedAt: null },
+      });
+      if (!book) return res.status(404).json({ error: 'Book not found' });
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+      });
+      if (!user || (book.userId !== req.user!.id && user.role !== 'ADMIN')) {
+        return res
+          .status(403)
+          .json({ error: 'Not authorized to delete this book' });
+      }
+      await prisma.book.update({
+        where: { id },
+        data: { deletedAt: new Date(), updatedBy: req.user!.id },
+      });
+      res.json({ message: 'Book deleted successfully' });
+    } catch (error) {
+      console.error('Delete book error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// Rate a book
 router.post(
   '/:id/rate',
   authenticateToken,
@@ -438,13 +450,15 @@ router.post(
     try {
       const { id } = req.params;
       const { rating, comment } = req.body;
-
-      if (rating < 1 || rating > 5) {
+      if (!rating || rating < 1 || rating > 5) {
         return res
           .status(400)
           .json({ error: 'Rating must be between 1 and 5' });
       }
-
+      const book = await prisma.book.findFirst({
+        where: { id, deletedAt: null },
+      });
+      if (!book) return res.status(404).json({ error: 'Book not found' });
       const bookRating = await prisma.bookRating.upsert({
         where: {
           userId_bookId: {
@@ -452,123 +466,23 @@ router.post(
             bookId: id,
           },
         },
-        update: {
-          rating,
-          comment,
-          updatedAt: new Date(),
-        },
         create: {
           userId: req.user!.id,
           bookId: id,
-          rating,
+          rating: parseInt(rating),
+          comment,
+        },
+        update: {
+          rating: parseInt(rating),
           comment,
         },
         include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              imageUrl: true,
-            },
-          },
+          user: { select: { id: true, name: true, imageUrl: true } },
         },
       });
-
-      res.json({
-        message: 'Rating saved successfully',
-        rating: bookRating,
-      });
+      res.json(bookRating);
     } catch (error) {
       console.error('Rate book error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-);
-
-// Get book ratings
-router.get('/:id/ratings', async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { page = '1', limit = '10' } = req.query;
-
-    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
-    const take = parseInt(limit as string);
-
-    const ratings = await prisma.bookRating.findMany({
-      where: { bookId: id },
-      skip,
-      take,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            imageUrl: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const totalRatings = await prisma.bookRating.count({
-      where: { bookId: id },
-    });
-
-    // Calculate average rating
-    const avgRating =
-      ratings.length > 0
-        ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
-        : null;
-
-    res.json({
-      ratings,
-      averageRating: avgRating,
-      pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
-        total: totalRatings,
-        pages: Math.ceil(totalRatings / parseInt(limit as string)),
-      },
-    });
-  } catch (error) {
-    console.error('Get book ratings error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Soft delete book
-router.delete(
-  '/:id',
-  authenticateToken,
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-
-      // Check if user owns the book
-      const existingBook = await prisma.book.findUnique({
-        where: { id },
-        select: { userId: true },
-      });
-
-      if (!existingBook) {
-        return res.status(404).json({ error: 'Book not found' });
-      }
-
-      if (existingBook.userId !== req.user!.id) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-
-      await prisma.book.update({
-        where: { id },
-        data: {
-          deletedAt: new Date(),
-          updatedBy: req.user!.id,
-        },
-      });
-
-      res.json({ message: 'Book deleted successfully' });
-    } catch (error) {
-      console.error('Delete book error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

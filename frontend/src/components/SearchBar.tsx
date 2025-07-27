@@ -123,49 +123,50 @@ const SearchBar: React.FC<SearchBarProps> = ({
       </form>
 
       {/* Search Results Dropdown */}
-      {showResults && results.length > 0 && (
-        <div className='w-full max-w-2xl mt-2 bg-white rounded-xl shadow-xl border border-gray-200 max-h-96 overflow-y-auto z-50'>
-          {results.map((result, index) => (
-            <div
-              key={`${result.type}-${result.id}-${index}`}
-              className='p-4 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer'
-              onClick={() => {
-                onSearch(query);
-                setShowResults(false);
-              }}
-            >
-              <div className='flex items-start justify-between'>
-                <div className='flex-1'>
-                  <div className='flex items-center gap-2 mb-1'>
-                    <span className='text-xs px-2 py-1 bg-primary-100 text-primary-700 rounded-full font-medium'>
-                      {result.type}
-                    </span>
-                    {result._rankingScore && (
-                      <span className='text-xs text-gray-500'>
-                        {Math.round(result._rankingScore * 100)}% match
+      <div className='relative w-full max-w-2xl'>
+        {showResults && results.length > 0 && (
+          <div className='absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 max-h-96 overflow-y-auto z-50'>
+            {results.map((result, index) => (
+              <div
+                key={`${result.type}-${result.id}-${index}`}
+                className='p-4 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer'
+                onClick={() => {
+                  onSearch(query);
+                  setShowResults(false);
+                }}
+              >
+                <div className='flex items-start justify-between'>
+                  <div className='flex-1'>
+                    <div className='flex items-center gap-2 mb-1'>
+                      <span className='text-xs px-2 py-1 bg-primary-100 text-primary-700 rounded-full font-medium'>
+                        {result.type}
                       </span>
+                      {result._rankingScore && (
+                        <span className='text-xs text-gray-500'>
+                          {Math.round(result._rankingScore * 100)}% match
+                        </span>
+                      )}
+                    </div>
+                    <h4 className='font-semibold text-gray-900 mb-1'>
+                      {result.title || result.name || 'Untitled'}
+                    </h4>
+                    {(result.description || result.bio || result.content) && (
+                      <p className='text-sm text-gray-600 line-clamp-2'>
+                        {result.description || result.bio || result.content}
+                      </p>
                     )}
                   </div>
-                  <h4 className='font-semibold text-gray-900 mb-1'>
-                    {result.title || result.name || 'Untitled'}
-                  </h4>
-                  {(result.description || result.bio || result.content) && (
-                    <p className='text-sm text-gray-600 line-clamp-2'>
-                      {result.description || result.bio || result.content}
-                    </p>
-                  )}
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showResults && results.length === 0 && query && !isLoading && (
-        <div className='w-full max-w-2xl mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 text-center text-gray-500'>
-          No results found for "{query}"
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+        {showResults && results.length === 0 && query && !isLoading && (
+          <div className='absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 text-center text-gray-500'>
+            No results found for "{query}"
+          </div>
+        )}
+      </div>
     </div>
   );
 };
