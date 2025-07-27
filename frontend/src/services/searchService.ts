@@ -21,11 +21,17 @@ export interface SearchResponse {
   searchedIndexes?: string[];
 }
 
+function getAuthHeader() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export const searchService = {
   // Universal search across all tables
   searchAll: async (query: string, limit = 50): Promise<SearchResponse> => {
     const response = await api.get('/search', {
       params: { q: query, limit },
+      headers: getAuthHeader(),
     });
     return response.data;
   },
@@ -34,6 +40,7 @@ export const searchService = {
   searchBooks: async (query: string, limit = 10): Promise<SearchResult[]> => {
     const response = await api.get('/search/books', {
       params: { q: query, limit },
+      headers: getAuthHeader(),
     });
     return response.data;
   },
@@ -46,6 +53,7 @@ export const searchService = {
   ): Promise<SearchResponse> => {
     const response = await api.get(`/search/by-type/${type}`, {
       params: { q: query, limit },
+      headers: getAuthHeader(),
     });
     return response.data;
   },

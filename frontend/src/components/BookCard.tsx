@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 interface BookCardProps {
   book: {
@@ -13,7 +14,10 @@ interface BookCardProps {
 
 const BookCard: React.FC<BookCardProps> = ({ book }) => {
   return (
-    <div className='bg-white rounded-lg shadow-md p-4 flex flex-col items-center w-64'>
+    <Link
+      to={`/${book.id}`}
+      className='bg-white rounded-lg shadow-md p-4 flex flex-col items-center w-64'
+    >
       <img
         src={book.imageUrl || '/default-book.png'}
         alt={book.title}
@@ -38,7 +42,7 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
           </span>
         </div>
       )}
-    </div>
+    </Link>
   );
 };
 

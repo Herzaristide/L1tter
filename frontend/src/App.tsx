@@ -12,6 +12,8 @@ import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Reading from './pages/Reading';
+
 const AppRoutes: React.FC = () => {
   const { isAuthenticated } = useAuth();
 
@@ -36,6 +38,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path='/:bookId'
+            element={
+              <ProtectedRoute>
+                <Reading />
               </ProtectedRoute>
             }
           />

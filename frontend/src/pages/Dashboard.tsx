@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import SearchBar from '../components/SearchBar';
 import searchService, { SearchResponse } from '../services/searchService';
-import CurrentlyReadingCard from '../components/BookCard';
-import { bookService } from '../services/bookService';
 import BookCard from '../components/BookCard';
+import { bookService } from '../services/bookService';
 
 const Dashboard: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchResponse | null>(
@@ -67,7 +66,7 @@ const Dashboard: React.FC = () => {
             style={{ scrollSnapType: 'x mandatory' }}
           >
             {books.map((book) => (
-              <BookCard key={book.id} book={book} />
+              <BookCard book={book} />
             ))}
           </div>
         )}

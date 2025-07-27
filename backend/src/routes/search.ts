@@ -16,17 +16,16 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     const searchLimit = parseInt(limit as string);
     const searchQuery = q as string;
 
-    // Define all the indexes/tables to search
+    // Define all the indexes/tables to search (new schema only)
     const searchIndexes = [
       { name: 'users', type: 'user' },
       { name: 'collections', type: 'collection' },
       { name: 'books', type: 'book' },
-      { name: 'book_locales', type: 'book_locale' },
       { name: 'tags', type: 'tag' },
       { name: 'chapters', type: 'chapter' },
-      { name: 'chapter_locales', type: 'chapter_locale' },
       { name: 'notes', type: 'note' },
       { name: 'authors', type: 'author' },
+      { name: 'publishers', type: 'publisher' },
     ];
 
     // Search all indexes in parallel
@@ -36,7 +35,6 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
           limit: Math.ceil(searchLimit / searchIndexes.length),
           attributesToHighlight: ['*'],
         });
-
         return result.hits.map((hit) => ({
           ...hit,
           type: index.type,
@@ -51,9 +49,8 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     const allResults = await Promise.all(searchPromises);
     const combinedResults = allResults.flat();
 
-    // Sort by relevance score if available, otherwise by relevance heuristics
+    // Sort by relevance score if available
     combinedResults.sort((a, b) => {
-      // Meilisearch provides ranking score
       const scoreA = (a as any)._rankingScore || 0;
       const scoreB = (b as any)._rankingScore || 0;
       return scoreB - scoreA;
@@ -89,42 +86,17 @@ router.get(
 
       const searchLimit = parseInt(limit as string);
 
-      // Search both books and book_locales for comprehensive results
-      const [bookResults, bookLocaleResults] = await Promise.all([
-        meiliClient
-          .index('books')
-          .search(q as string, {
-            limit: searchLimit,
-            filter: `isPublic = true OR userId = "${req.user?.id || ''}"`,
-            attributesToHighlight: ['title'],
-          })
-          .catch(() => ({ hits: [] })),
+      // Search only books index
+      const bookResults = await meiliClient
+        .index('books')
+        .search(q as string, {
+          limit: searchLimit,
+          filter: `isPublic = true OR userId = "${req.user?.id || ''}"`,
+          attributesToHighlight: ['title'],
+        })
+        .catch(() => ({ hits: [] }));
 
-        meiliClient
-          .index('book_locales')
-          .search(q as string, {
-            limit: searchLimit,
-            attributesToHighlight: ['title'],
-          })
-          .catch(() => ({ hits: [] })),
-      ]);
-
-      // Combine and deduplicate results
-      const combinedHits = [...bookResults.hits, ...bookLocaleResults.hits];
-      const uniqueBooks = combinedHits.reduce((acc, hit) => {
-        const bookId = (hit as any).bookId || (hit as any).id;
-        if (
-          !acc.find(
-            (item) =>
-              (item as any).id === bookId || (item as any).bookId === bookId
-          )
-        ) {
-          acc.push({ ...hit, type: 'book' });
-        }
-        return acc;
-      }, [] as any[]);
-
-      res.json(uniqueBooks.slice(0, searchLimit));
+      res.json(bookResults.hits.slice(0, searchLimit));
     } catch (error) {
       console.error('Book search error:', error);
       res.status(500).json({ error: 'Book search failed' });
@@ -147,7 +119,7 @@ router.get(
 
       const searchLimit = parseInt(limit as string);
 
-      // Map types to indexes
+      // Map types to indexes (new schema only)
       const typeToIndex: Record<string, string> = {
         user: 'users',
         users: 'users',
@@ -155,18 +127,16 @@ router.get(
         collections: 'collections',
         book: 'books',
         books: 'books',
-        book_locale: 'book_locales',
-        book_locales: 'book_locales',
         tag: 'tags',
         tags: 'tags',
         chapter: 'chapters',
         chapters: 'chapters',
-        chapter_locale: 'chapter_locales',
-        chapter_locales: 'chapter_locales',
         note: 'notes',
         notes: 'notes',
         author: 'authors',
         authors: 'authors',
+        publisher: 'publishers',
+        publishers: 'publishers',
       };
 
       const indexName = typeToIndex[type.toLowerCase()];
