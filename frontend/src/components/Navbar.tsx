@@ -63,7 +63,7 @@ const Navbar: React.FC = () => {
 
           {user?.role === 'ADMIN' && (
             <Link
-              to='/upload'
+              to='/management'
               className='flex items-center p-3 rounded-xl hover:bg-white/10 transition-all duration-200 group/item'
               onClick={() => setIsExpanded(false)}
             >
@@ -78,12 +78,12 @@ const Navbar: React.FC = () => {
                     strokeLinecap='round'
                     strokeLinejoin='round'
                     strokeWidth={2}
-                    d='M12 4v16m8-8H4'
+                    d='M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6'
                   />
                 </svg>
               </div>
               <span className='ml-3 text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 lg:group-hover:block lg:hidden'>
-                Upload
+                Management
               </span>
             </Link>
           )}

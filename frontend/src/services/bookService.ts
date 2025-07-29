@@ -2,6 +2,22 @@ import api from './api';
 import { Book } from '../types';
 
 export const bookService = {
+  updateChapter: async (
+    chapterId: string,
+    data: { title: string; content: string }
+  ): Promise<any> => {
+    const response = await api.put(`/books/chapters/${chapterId}`, data);
+    return response.data;
+  },
+
+  createChapter: async (
+    bookId: string,
+    data: { title: string; content: string; order?: number }
+  ): Promise<any> => {
+    const response = await api.post(`/books/${bookId}/chapters`, data);
+    return response.data;
+  },
+
   getBooks: async (params: any = {}): Promise<Book[]> => {
     // Supports search, filter, pagination
     const response = await api.get('/books', { params });

@@ -13,13 +13,15 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Reading from './pages/Reading';
+import Management from './pages/Management';
+import Editing from './pages/Editing';
 
 const AppRoutes: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   return (
     <div className='h-screen w-screen bg-white dark:bg-black text-black dark:text-white'>
-      {/* {isAuthenticated && <Navbar />} */}
+      {isAuthenticated && <Navbar />}
 
       <main className='px-8 lg:px-40 h-screen w-screen'>
         <Routes>
@@ -49,6 +51,28 @@ const AppRoutes: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          {/* Admin-only Editing page */}
+          {isAuthenticated && user?.role === 'ADMIN' && (
+            <Route
+              path='/:bookId/edit'
+              element={
+                <ProtectedRoute>
+                  <Editing />
+                </ProtectedRoute>
+              }
+            />
+          )}
+          {/* Admin-only Management page */}
+          {isAuthenticated && user?.role === 'ADMIN' && (
+            <Route
+              path='/management'
+              element={
+                <ProtectedRoute>
+                  <Management />
+                </ProtectedRoute>
+              }
+            />
+          )}
           <Route path='*' element={<Navigate to='/' replace />} />
         </Routes>
       </main>

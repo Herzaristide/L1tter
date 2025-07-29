@@ -7,6 +7,7 @@ const prisma = new PrismaClient();
 
 // Get all books with search and filtering
 router.get('/', async (req: AuthRequest, res: Response) => {
+  console.log('[GET] /books called', { query: req.query });
   try {
     const {
       search,
@@ -84,7 +85,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    const booksWithRatings = books.map((book) => {
+    const booksWithRatings = books.map((book: any) => {
       const avgRating =
         book.ratings.length > 0
           ? book.ratings.reduce((sum: any, r: any) => sum + r.rating, 0) /
@@ -104,14 +105,23 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         pages: Math.ceil(totalBooks / parseInt(limit as string)),
       },
     });
+    console.log('[GET] /books response', {
+      status: 200,
+      books: booksWithRatings.length,
+    });
   } catch (error) {
     console.error('Get books error:', error);
     res.status(500).json({ error: 'Internal server error' });
+    console.log('[GET] /books response', { status: 500, error });
   }
 });
 
 // Get book by ID
 router.get('/:id', async (req: AuthRequest, res: Response) => {
+  console.log('[GET] /books/:id called', {
+    params: req.params,
+    query: req.query,
+  });
   try {
     const { id } = req.params;
     const { chapterId } = req.query;
@@ -175,20 +185,32 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       },
     });
     if (!book) return res.status(404).json({ error: 'Book not found' });
+    if (!book) {
+      console.log('[GET] /books/:id response', { status: 404 });
+      return res.status(404).json({ error: 'Book not found' });
+    }
     const avgRating =
       book.ratings.length > 0
         ? book.ratings.reduce((sum: any, r: any) => sum + r.rating, 0) /
           book.ratings.length
         : null;
     res.json({ ...book, averageRating: avgRating });
+    console.log('[GET] /books/:id response', { status: 200, bookId: book.id });
+
+    console.log('test');
   } catch (error) {
     console.error('Get book error:', error);
     res.status(500).json({ error: 'Internal server error' });
+    console.log('[GET] /books/:id response', { status: 500, error });
   }
 });
 
 // Get all editions of a work
 router.get('/work/:workId', async (req: AuthRequest, res: Response) => {
+  console.log('[GET] /books/work/:workId called', {
+    params: req.params,
+    query: req.query,
+  });
   try {
     const { workId } = req.params;
     const { language } = req.query;
@@ -207,7 +229,7 @@ router.get('/work/:workId', async (req: AuthRequest, res: Response) => {
       },
       orderBy: [{ language: 'asc' }, { editionPublished: 'desc' }],
     });
-    const editionsWithRatings = editions.map((edition) => {
+    const editionsWithRatings = editions.map((edition: any) => {
       const avgRating =
         edition.ratings.length > 0
           ? edition.ratings.reduce((sum: any, r: any) => sum + r.rating, 0) /
@@ -220,16 +242,22 @@ router.get('/work/:workId', async (req: AuthRequest, res: Response) => {
       workId,
       editions: editionsWithRatings,
       totalEditions: editions.length,
-      languages: [...new Set(editions.map((e) => e.language))],
+      languages: [...new Set(editions.map((e: any) => e.language))],
+    });
+    console.log('[GET] /books/work/:workId response', {
+      status: 200,
+      totalEditions: editions.length,
     });
   } catch (error) {
     console.error('Get work editions error:', error);
     res.status(500).json({ error: 'Internal server error' });
+    console.log('[GET] /books/work/:workId response', { status: 500, error });
   }
 });
 
 // Create a new book
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  console.log('[POST] /books called', { body: req.body });
   try {
     const {
       workId,
@@ -297,9 +325,14 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       },
     });
     res.status(201).json(completeBook);
+    console.log('[POST] /books response', {
+      status: 201,
+      bookId: completeBook?.id,
+    });
   } catch (error) {
     console.error('Create book error:', error);
     res.status(500).json({ error: 'Internal server error' });
+    console.log('[POST] /books response', { status: 500, error });
   }
 });
 
@@ -308,6 +341,10 @@ router.put(
   '/:id',
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
+    console.log('[PUT] /books/:id called', {
+      params: req.params,
+      body: req.body,
+    });
     try {
       const { id } = req.params;
       const {
@@ -404,9 +441,14 @@ router.put(
         },
       });
       res.json(completeBook);
+      console.log('[PUT] /books/:id response', {
+        status: 200,
+        bookId: completeBook?.id,
+      });
     } catch (error) {
       console.error('Update book error:', error);
       res.status(500).json({ error: 'Internal server error' });
+      console.log('[PUT] /books/:id response', { status: 500, error });
     }
   }
 );
@@ -435,9 +477,11 @@ router.delete(
         data: { deletedAt: new Date(), updatedBy: req.user!.id },
       });
       res.json({ message: 'Book deleted successfully' });
+      console.log('[DELETE] /books/:id response', { status: 200, bookId: id });
     } catch (error) {
       console.error('Delete book error:', error);
       res.status(500).json({ error: 'Internal server error' });
+      console.log('[DELETE] /books/:id response', { status: 500, error });
     }
   }
 );
@@ -481,9 +525,95 @@ router.post(
         },
       });
       res.json(bookRating);
+      console.log('[POST] /books/:id/rate response', {
+        status: 200,
+        bookId: id,
+      });
     } catch (error) {
       console.error('Rate book error:', error);
       res.status(500).json({ error: 'Internal server error' });
+      console.log('[POST] /books/:id/rate response', { status: 500, error });
+    }
+  }
+);
+
+// Update a chapter
+router.put(
+  '/chapters/:id',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { title, content } = req.body;
+      const chapter = await prisma.chapter.findUnique({ where: { id } });
+      if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+      // Optionally, check if user is admin or owner of the book
+      const book = await prisma.book.findUnique({
+        where: { id: chapter.bookId },
+      });
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+      });
+      if (!user || (book?.userId !== req.user!.id && user.role !== 'ADMIN')) {
+        return res
+          .status(403)
+          .json({ error: 'Not authorized to edit this chapter' });
+      }
+      const updatedChapter = await prisma.chapter.update({
+        where: { id },
+        data: { title, content },
+      });
+      res.json(updatedChapter);
+      console.log('[PUT] /chapters/:id response', {
+        status: 200,
+        chapterId: updatedChapter?.id,
+      });
+    } catch (error) {
+      console.error('Update chapter error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+      console.log('[PUT] /chapters/:id response', { status: 500, error });
+    }
+  }
+);
+
+// Create a new chapter
+router.post(
+  '/:bookId/chapters',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { bookId } = req.params;
+      const { title, content, order } = req.body;
+      const book = await prisma.book.findUnique({ where: { id: bookId } });
+      if (!book) return res.status(404).json({ error: 'Book not found' });
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+      });
+      if (!user || (book.userId !== req.user!.id && user.role !== 'ADMIN')) {
+        return res
+          .status(403)
+          .json({ error: 'Not authorized to add chapter to this book' });
+      }
+      const chapter = await prisma.chapter.create({
+        data: {
+          bookId,
+          title,
+          content,
+          order,
+        },
+      });
+      res.status(201).json(chapter);
+      console.log('[POST] /books/:bookId/chapters response', {
+        status: 201,
+        chapterId: chapter?.id,
+      });
+    } catch (error) {
+      console.error('Create chapter error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+      console.log('[POST] /books/:bookId/chapters response', {
+        status: 500,
+        error,
+      });
     }
   }
 );

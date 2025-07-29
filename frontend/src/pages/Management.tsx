@@ -3,8 +3,10 @@ import SearchBar from '../components/SearchBar';
 import searchService, { SearchResponse } from '../services/searchService';
 import BookCard from '../components/BookCard';
 import { bookService } from '../services/bookService';
+import { Link } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 
-const Dashboard: React.FC = () => {
+const Management: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchResponse | null>(
     null
   );
@@ -50,7 +52,7 @@ const Dashboard: React.FC = () => {
       {/* Carousel for currently read books */}
       <div className='mt-8 mb-4'>
         <h2 className='text-xl font-semibold mb-2 text-gray-900 dark:text-white'>
-          Currently Reading
+          All books
         </h2>
         {loadingCarousel ? (
           <div className='flex justify-center py-8'>
@@ -65,8 +67,14 @@ const Dashboard: React.FC = () => {
             className='flex gap-6 overflow-x-auto scrollbar-hide snap-x snap-mandatory w-full px-2'
             style={{ scrollSnapType: 'x mandatory' }}
           >
+            <Link
+              to={''}
+              className=' rounded-lg shadow-md p-4 flex flex-col items-center w-64 justify-center hover:bg-gray-200'
+            >
+              <Plus size={56} />
+            </Link>
             {books.map((book) => (
-              <BookCard book={book} link={`/${book.id}`} />
+              <BookCard book={book} link={`/${book.id}/edit`} />
             ))}
           </div>
         )}
@@ -82,4 +90,4 @@ const Dashboard: React.FC = () => {
   );
 };
 
-export default Dashboard;
+export default Management;

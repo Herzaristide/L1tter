@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 interface BookCardProps {
+  link: string;
   book: {
     id: string;
     title: string;
@@ -12,10 +13,10 @@ interface BookCardProps {
   };
 }
 
-const BookCard: React.FC<BookCardProps> = ({ book }) => {
+const BookCard: React.FC<BookCardProps> = ({ book, link }) => {
   return (
     <Link
-      to={`/${book.id}`}
+      to={link}
       className='bg-white rounded-lg shadow-md p-4 flex flex-col items-center w-64'
     >
       <img
