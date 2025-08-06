@@ -68,7 +68,7 @@ const Management: React.FC = () => {
             style={{ scrollSnapType: 'x mandatory' }}
           >
             <Link
-              to={''}
+              to={'/create'}
               className=' rounded-lg shadow-md p-4 flex flex-col items-center w-64 justify-center hover:bg-gray-200'
             >
               <Plus size={56} />

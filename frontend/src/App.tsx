@@ -15,6 +15,7 @@ import Dashboard from './pages/Dashboard';
 import Reading from './pages/Reading';
 import Management from './pages/Management';
 import Editing from './pages/Editing';
+import CreateBook from './pages/CreateBook';
 
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
@@ -69,6 +70,17 @@ const AppRoutes: React.FC = () => {
               element={
                 <ProtectedRoute>
                   <Management />
+                </ProtectedRoute>
+              }
+            />
+          )}
+          {/* Admin-only Create Book page */}
+          {isAuthenticated && user?.role === 'ADMIN' && (
+            <Route
+              path='/create'
+              element={
+                <ProtectedRoute>
+                  <CreateBook />
                 </ProtectedRoute>
               }
             />

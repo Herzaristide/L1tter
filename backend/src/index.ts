@@ -10,6 +10,7 @@ import progressRoutes from './routes/progress';
 import tagsRoutes from './routes/tags';
 import preferencesRoutes from './routes/preferences';
 import searchRoutes from './routes/search';
+import convertRoutes from './routes/convert';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -61,6 +62,7 @@ app.use('/api/progress', progressRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/convert', convertRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
