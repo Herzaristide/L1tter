@@ -24,449 +24,270 @@ const upload = multer({
 });
 
 /**
- * Extract text from PDF buffer with enhanced structure detection
- * Uses line-by-line analysis to simulate position and formatting detection
+ * Simple page number removal function
  */
-async function extractTextWithStructure(
-  buffer: Buffer
-): Promise<{ title: string; content: string }[]> {
-  try {
-    // Use pdf-parse to extract text - no special options needed for structure detection
-    const data = await pdf(buffer);
+function removePageNumbers(text: string): string {
+  // Split into lines for analysis
+  const lines = text.split('\n');
+  const filteredLines: string[] = [];
 
-    // Enhanced structure detection using line positioning analysis
-    return detectChaptersFromLineAnalysis(data.text);
-  } catch (error) {
-    console.error('Error extracting structured text from PDF:', error);
-    // Fallback to regular extraction
-    return await extractTextFromPDF(buffer);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Skip empty lines
+    if (!trimmed) {
+      filteredLines.push(line);
+      continue;
+    }
+
+    // Check if this line is likely a page number
+    const isPageNumber =
+      // Page number patterns
+      /^\d{1,4}$/.test(trimmed) || // Just numbers: 1, 42, 123
+      /^page\s*\d+$/i.test(trimmed) || // "Page 1", "page 42"
+      /^\d+\s*page$/i.test(trimmed) || // "1 page", "42 Page"
+      /^-\d{1,4}-$/.test(trimmed) || // "-8-", "-42-", "-24-" (exact dash pattern)
+      /^—\d{1,4}—$/.test(trimmed) || // "—8—", "—42—" (em dash)
+      /^–\d{1,4}–$/.test(trimmed) || // "–8–", "–42–" (en dash)
+      /^\s*-\s*\d{1,4}\s*-\s*$/.test(trimmed) || // "- 8 -", " - 42 - "
+      /^\s*—\s*\d{1,4}\s*—\s*$/.test(trimmed) || // "— 16 —", " — 42 — " (em dash with spaces)
+      /^\s*–\s*\d{1,4}\s*–\s*$/.test(trimmed) || // "– 16 –", " – 42 – " (en dash with spaces)
+      /^[ivxlcdm]{1,8}$/.test(trimmed.toLowerCase()) || // Roman numerals: i, ii, iii, iv
+      // Additional patterns
+      /^\[\s*\d{1,4}\s*\]$/.test(trimmed) || // [5], [42]
+      /^\(\s*\d{1,4}\s*\)$/.test(trimmed) || // (5), (42)
+      /^\d{1,4}\s*[-–—]\s*\d{1,4}$/.test(trimmed); // 5-6, 42-43 (page ranges)
+
+    // Enhanced chapter protection - protect simple chapter numbers
+    const isProtectedChapter =
+      // Explicit chapter keywords
+      /\b(chapter|part|section)\s*\d+/i.test(line) || // "Chapter 1", "Part 2"
+      (i > 0 && /\b(chapter|part|section)\b/i.test(lines[i - 1])) || // Previous line has chapter keyword
+      // Protect numbers/Roman numerals that are likely chapters (at top of page with indentation)
+      (i < 10 && // Within first 10 lines (top of page)
+        (/^\d{1,2}$/.test(trimmed) || /^[ivxlcdm]{1,8}$/i.test(trimmed)) && // Simple number or Roman numeral
+        line.length - line.trimStart().length >= 5) || // Has some indentation (likely centered)
+      // Protect if followed by chapter-like content
+      (i < lines.length - 1 &&
+        (/^\d{1,2}$/.test(trimmed) || /^[ivxlcdm]{1,8}$/i.test(trimmed)) && // Simple number or Roman numeral
+        lines[i + 1].trim().length > 3 && // Next line has substantial content
+        /^[A-Z]/.test(lines[i + 1].trim())) || // Next line starts with capital
+      // Protect if isolated with empty lines around (chapter pattern)
+      (i > 0 &&
+        i < 10 &&
+        i < lines.length - 1 &&
+        (/^\d{1,2}$/.test(trimmed) || /^[ivxlcdm]{1,8}$/i.test(trimmed)) &&
+        lines[i - 1].trim().length === 0 && // Empty line before
+        lines[i + 1].trim().length === 0); // Empty line after
+
+    // Remove if it's a page number pattern AND not a protected chapter
+    if (isPageNumber && !isProtectedChapter) {
+      // Skip this line (don't add to filtered lines)
+      continue;
+    }
+
+    // Keep all other lines
+    filteredLines.push(line);
   }
+
+  return filteredLines.join('\n');
 }
 
 /**
- * Check if a number appears at regular intervals (indicating page numbers)
+ * Detect chapter titles and numbers in text
  */
-function isNumberAtRegularInterval(
-  lines: Array<{ trimmed: string; isEmpty: boolean }>,
-  currentIndex: number,
-  currentText: string
-): boolean {
-  const currentNum = parseInt(currentText);
-  if (isNaN(currentNum) || currentNum < 1 || currentNum > 999) return false;
+function detectChapters(text: string): { title: string; content: string }[] {
+  const lines = text.split('\n');
+  const chapters: { title: string; content: string; startIndex: number }[] = [];
 
-  // Look for similar numbers within a reasonable range
-  const searchRange = Math.min(50, Math.floor(lines.length / 10));
-  let foundSimilarNumbers = 0;
+  console.debug(
+    `[Chapter Detection] Starting analysis on ${lines.length} lines`
+  );
 
-  for (
-    let i = Math.max(0, currentIndex - searchRange);
-    i < Math.min(lines.length, currentIndex + searchRange);
-    i++
-  ) {
-    if (i === currentIndex) continue;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
 
-    const lineText = lines[i].trimmed;
-    if (/^\d{1,3}$/.test(lineText)) {
-      const num = parseInt(lineText);
-      // Check if it's a sequential number or follows a pattern
-      if (Math.abs(num - currentNum) <= 5) {
-        foundSimilarNumbers++;
-      }
-    }
-  }
+    if (!trimmed) continue;
 
-  // If we find 2 or more similar numbers, it's likely a page number pattern
-  return foundSimilarNumbers >= 2;
-}
+    // Calculate indentation (centering indicator)
+    const indentation = line.length - line.trimStart().length;
+    const lineLength = trimmed.length;
+    const isLikelyCentered =
+      indentation >= 10 || (indentation >= 5 && lineLength < 50);
 
-/**
- * Advanced chapter detection using line-by-line analysis
- * Simulates position and font-based detection through text patterns
- */
-function detectChaptersFromLineAnalysis(
-  text: string
-): { title: string; content: string }[] {
-  // Split into lines and analyze each line's characteristics
-  const lines = text
-    .split('\n')
-    .map((line) => ({
-      original: line,
-      trimmed: line.trim(),
-      leadingSpaces: line.length - line.trimStart().length,
-      trailingSpaces: line.length - line.trimEnd().length,
-      isEmpty: line.trim().length === 0,
-    }))
-    .filter((line) => !line.isEmpty);
-
-  // Analyze each line for chapter indicators
-  const lineAnalysis = lines.map((line, index) => {
-    let score = 0;
-    let reasons: string[] = [];
-    const text = line.trimmed;
-
-    // 1. STRONG PATTERNS (Definitive chapter markers)
-    const strongPatterns = [
-      {
-        pattern: /^Chapter\s+\d+(\s*[:\-\.]?\s*.*)?$/i,
-        points: 100,
-        reason: 'Chapter_Number',
-      },
-      {
-        pattern: /^CHAPTER\s+\d+(\s*[:\-\.]?\s*.*)?$/i,
-        points: 100,
-        reason: 'CHAPTER_NUMBER',
-      },
-      {
-        pattern: /^Chapter\s+[IVX]+(\s*[:\-\.]?\s*.*)?$/i,
-        points: 95,
-        reason: 'Chapter_Roman',
-      },
-      {
-        pattern: /^CHAPTER\s+[IVX]+(\s*[:\-\.]?\s*.*)?$/i,
-        points: 95,
-        reason: 'CHAPTER_ROMAN',
-      },
-      {
-        pattern: /^Part\s+\d+(\s*[:\-\.]?\s*.*)?$/i,
-        points: 90,
-        reason: 'Part_Number',
-      },
-      {
-        pattern: /^PART\s+\d+(\s*[:\-\.]?\s*.*)?$/i,
-        points: 90,
-        reason: 'PART_NUMBER',
-      },
-    ];
-
-    // 2. MEDIUM PATTERNS (Likely chapter markers)
-    const mediumPatterns = [
-      {
-        pattern: /^\d+\.\s+[A-Z][^.]{5,60}$/i,
-        points: 70,
-        reason: 'Numbered_Section',
-      },
-      {
-        pattern: /^[IVX]+\.\s+[A-Z][^.]{5,60}$/i,
-        points: 65,
-        reason: 'Roman_Section',
-      },
-      { pattern: /^[A-Z][A-Z\s]{10,80}$/, points: 60, reason: 'ALL_CAPS' },
-      {
-        pattern: /^[A-Z][a-z]+(\s+[A-Z][a-z]+){1,6}$/,
-        points: 50,
-        reason: 'Title_Case',
-      },
-    ];
-
-    // 3. SIMPLE NUMBERED CHAPTERS (Common in books)
-    const simpleNumberPatterns = [
-      {
-        pattern: /^\d+\s*$/,
-        points: 85,
-        reason: 'Simple_Number_Chapter',
-      },
-      {
-        pattern: /^\d+\s*[:\-]\s*.*$/,
-        points: 80,
-        reason: 'Number_With_Title',
-      },
-      {
-        pattern: /^[IVX]+\s*$/i,
-        points: 80,
-        reason: 'Simple_Roman_Chapter',
-      },
-    ];
-
-    // Test patterns
-    [...strongPatterns, ...mediumPatterns, ...simpleNumberPatterns].forEach(
-      ({ pattern, points, reason }) => {
-        if (pattern.test(text)) {
-          score += points;
-          reasons.push(reason);
-        }
-      }
-    );
-
-    // 4. POSITIONING ANALYSIS (Simulating visual layout)
-
-    // TOP OF PAGE DETECTION (Strong indicator for chapter titles)
-    const isTopOfPage = index < 5; // First few lines of document section
-    const isAfterPageBreak =
-      index > 0 &&
-      (lines[index - 1]?.trimmed.includes('---') ||
-        lines[index - 1]?.trimmed.length === 0);
-
-    if (isTopOfPage || isAfterPageBreak) {
-      score += 50; // Strong boost for top-of-page positioning
-      reasons.push('Top_Of_Page');
-    }
-
-    // Centered text (many leading spaces, short line) - common for chapter titles
-    if (line.leadingSpaces >= 10 && text.length < 60 && text.length > 5) {
-      score += 40;
-      reasons.push('Centered_Text');
-    }
-
-    // Left-aligned but indented (common for chapter titles)
-    if (
-      line.leadingSpaces >= 5 &&
-      line.leadingSpaces <= 15 &&
-      text.length < 80
-    ) {
-      score += 25;
-      reasons.push('Indented_Title');
-    }
-
-    // Standalone line (isolated by empty lines)
-    const prevLine = lines[index - 1];
-    const nextLine = lines[index + 1];
-    const isIsolated =
-      (!prevLine || prevLine.isEmpty) && (!nextLine || nextLine.isEmpty);
-
-    if (isIsolated && text.length > 5 && text.length < 100) {
-      score += 35;
-      reasons.push('Isolated_Line');
-    }
-
-    // 5. CHAPTER-SPECIFIC PATTERNS (Enhanced for top-of-page detection)
-
-    // Boost simple numbers when they appear at top of page/section
-    if (/^\d+\s*$/.test(text) && (isTopOfPage || isAfterPageBreak)) {
-      score += 30; // Additional boost for top-positioned numbers
-      reasons.push('Top_Positioned_Number');
-    }
-
-    // Detect chapter titles that follow numbers (common pattern)
-    if (index > 0) {
-      const prevLineText = lines[index - 1]?.trimmed;
-      if (
-        prevLineText &&
-        /^\d+\s*$/.test(prevLineText) &&
-        text.length > 5 &&
-        text.length < 100 &&
-        /^[A-Z]/.test(text)
-      ) {
-        score += 35; // Title following a chapter number
-        reasons.push('Title_After_Number');
-      }
-    }
-
-    // Detect when current line is a number and next line is a title
-    if (/^\d+\s*$/.test(text) && index < lines.length - 1) {
-      const nextLineText = lines[index + 1]?.trimmed;
-      if (
-        nextLineText &&
-        nextLineText.length > 5 &&
-        nextLineText.length < 100 &&
-        /^[A-Z]/.test(nextLineText) &&
-        !/[.!?]$/.test(nextLineText)
-      ) {
-        score += 35; // Number followed by likely title
-        reasons.push('Number_Before_Title');
-      }
-    }
-
-    // PAGE NUMBER FILTERING (Apply after positive scoring to preserve valid chapters)
-    if (/^\d+\s*$/.test(text)) {
-      // Check if this looks like a page number - but be more conservative
-      const hasChapterIndicators =
-        isTopOfPage ||
-        isAfterPageBreak || // At page top
-        (line.leadingSpaces >= 5 && line.leadingSpaces <= 20) || // Reasonable indentation
-        reasons.includes('Number_Before_Title') || // Followed by title
-        reasons.includes('Title_After_Number'); // Previous was title
-
-      // Only apply page number filtering if no strong chapter indicators
-      if (!hasChapterIndicators) {
-        const isLikelyPageNumber =
-          // Very short numbers (1-3 digits) at edge positions
-          (text.length <= 3 &&
-            (line.leadingSpaces > 20 || line.trailingSpaces > 20)) ||
-          // Numbers at the very beginning or end of lines with lots of spacing
-          (line.leadingSpaces === 0 && line.trailingSpaces > 15) ||
-          (line.leadingSpaces > 20 && line.trailingSpaces === 0) ||
-          // BOTTOM OF PAGE DETECTION - numbers near the end of document sections
-          index > lines.length - 10 || // Last 10 lines of document
-          // Numbers followed by page breaks or end of content
-          (index < lines.length - 3 &&
-            lines
-              .slice(index + 1, index + 4)
-              .every((l) => l.trimmed.length < 5)) ||
-          // Numbers that are isolated at document boundaries
-          (index > lines.length * 0.8 && // In last 20% of document
-            text.length <= 3 &&
-            line.leadingSpaces > 15) ||
-          // AGGRESSIVE PAGE NUMBER PATTERNS
-          // Numbers that are completely isolated (no content nearby)
-          (text.length <= 3 &&
-            index > 10 && // Not at very beginning
-            index < lines.length - 10 && // Not at very end
-            lines
-              .slice(Math.max(0, index - 3), index)
-              .every((l) => l.trimmed.length < 15) &&
-            lines
-              .slice(index + 1, Math.min(lines.length, index + 4))
-              .every((l) => l.trimmed.length < 15)) ||
-          // Numbers with excessive spacing (characteristic of page numbers)
-          (text.length <= 3 && line.leadingSpaces + line.trailingSpaces > 40) ||
-          // Numbers at regular intervals (check if similar numbers appear regularly)
-          (text.length <= 3 && isNumberAtRegularInterval(lines, index, text));
-
-        if (isLikelyPageNumber) {
-          score -= 100; // Maximum reduction for page numbers
-          reasons.push('Likely_Page_Number');
-        }
-      }
-    }
-
-    // ADDITIONAL PAGE NUMBER CHECK - exclude isolated single/double digit numbers
-    if (
-      /^\d{1,2}$/.test(text) &&
-      line.leadingSpaces > 15 && // Increased threshold
-      text.length <= 2 &&
-      index > lines.length * 0.1 && // Not in first 10% of document
-      index < lines.length * 0.9 && // Not in last 10% either
-      !reasons.includes('Top_Of_Page') && // Not at top of page
-      !reasons.includes('Number_Before_Title') // Not followed by title
-    ) {
-      score -= 50; // Additional penalty for isolated small numbers
-      reasons.push('Isolated_Small_Number');
-    }
-
-    // 6. FORMAT ANALYSIS (Simulating font characteristics)
-
-    // No ending punctuation (titles often don't end with periods)
-    if (text.length > 5 && !/[.!?;,]$/.test(text)) {
-      score += 15;
-      reasons.push('No_Punctuation');
-    }
-
-    // Contains chapter-related keywords
-    if (
-      /\b(introduction|conclusion|summary|preface|epilogue|appendix)\b/i.test(
-        text
-      )
-    ) {
-      score += 25;
-      reasons.push('Chapter_Keywords');
-    }
-
-    // Followed by longer content (chapters usually followed by paragraphs)
-    if (
-      nextLine &&
-      !nextLine.isEmpty &&
-      nextLine.trimmed.length > text.length * 1.5
-    ) {
-      score += 20;
-      reasons.push('Followed_By_Content');
-    }
-
-    // 7. CONTENT STRUCTURE ANALYSIS
-
-    // Line starts with number or Roman numeral
-    if (/^(\d+|[IVX]+)[\.\s]/.test(text)) {
-      score += 15;
-      reasons.push('Starts_With_Number');
-    }
-
-    // Contains colon (often used in chapter titles)
-    if (text.includes(':') && text.length < 100) {
-      score += 10;
-      reasons.push('Contains_Colon');
-    }
-
-    return {
-      text,
-      index,
-      score,
-      reasons,
-      isChapterCandidate: score >= 40,
-      confidence: Math.min(score / 100, 1),
-    };
-  });
-
-  // Filter potential chapters and remove conflicts
-  let chapterCandidates = lineAnalysis
-    .filter((analysis) => analysis.isChapterCandidate)
-    .sort((a, b) => b.score - a.score);
-
-  // Remove candidates that are too close to higher-scoring ones
-  chapterCandidates = chapterCandidates.filter((candidate, index) => {
-    return !chapterCandidates
-      .slice(0, index)
-      .some(
-        (other) =>
-          Math.abs(candidate.index - other.index) <= 2 &&
-          other.score > candidate.score
+    // Debug info for potential chapter lines (first 20 lines only to avoid spam)
+    if (i < 20 && lineLength > 3 && lineLength < 100) {
+      console.debug(
+        `[Chapter Detection] Line ${i}: "${trimmed}" (indent: ${indentation}, centered: ${isLikelyCentered})`
       );
-  });
+    }
 
-  // Sort by original document order
-  chapterCandidates.sort((a, b) => a.index - b.index);
+    // Simplified chapter detection patterns - focus on simple numbers and Roman numerals
+    const isChapterPattern =
+      // Simple numeric chapters: 1, 2, 3, etc.
+      /^\d{1,2}$/.test(trimmed) ||
+      // Roman numerals: I, II, III, IV, V, etc.
+      /^[ivxlcdm]{1,8}$/i.test(trimmed) ||
+      // Explicit chapter patterns (backup)
+      /^(chapter|part|section|book)\s*\d+/i.test(trimmed) ||
+      /^(chapter|part|section|book)\s+[ivxlcdm]+$/i.test(trimmed) ||
+      // Special sections
+      /^(prologue|epilogue|introduction|conclusion|preface|acknowledgments?|bibliography|index)$/i.test(
+        trimmed
+      );
 
-  // If no good chapters found, return whole document
-  if (chapterCandidates.length === 0) {
-    return [
-      {
-        title: 'Content',
-        content: processTextContent(lines.map((l) => l.trimmed).join('\n')),
-      },
-    ];
-  }
+    if (isChapterPattern) {
+      let chapterTitle = trimmed;
+      let titleEndIndex = i;
 
-  // Build chapters from detected boundaries
-  const chapters: { title: string; content: string }[] = [];
+      // Debug: Log detected chapter pattern
+      console.debug(
+        `[Chapter Detection] Found potential chapter at line ${i}: "${trimmed}"`
+      );
 
-  for (let i = 0; i < chapterCandidates.length; i++) {
-    const currentChapter = chapterCandidates[i];
-    const nextChapter = chapterCandidates[i + 1];
+      // Check if next line is also part of the title (continuation or subtitle)
+      if (i < lines.length - 1) {
+        const nextLine = lines[i + 1].trim();
+        const nextIndentation =
+          lines[i + 1].length - lines[i + 1].trimStart().length;
+        const nextIsCentered =
+          nextIndentation >= 5 ||
+          (nextIndentation >= 3 && nextLine.length < 50);
 
-    const startIndex = currentChapter.index + 1; // Start after the title
-    const endIndex = nextChapter ? nextChapter.index : lines.length;
+        if (
+          nextLine.length > 0 &&
+          nextLine.length < 80 &&
+          nextIsCentered &&
+          /^[A-Za-z\s\-':,]+$/.test(nextLine) &&
+          !nextLine.includes('.')
+        ) {
+          chapterTitle += ' ' + nextLine;
+          titleEndIndex = i + 1;
+          console.debug(
+            `[Chapter Detection] Extended title: "${chapterTitle}"`
+          );
+        }
+      }
 
-    // Extract content lines between chapters
-    const contentLines = lines
-      .slice(startIndex, endIndex)
-      .map((line) => line.trimmed)
-      .filter((line) => line.length > 0);
-
-    const chapterContent = contentLines.join('\n').trim();
-
-    if (chapterContent.length > 10) {
-      // Only include chapters with substantial content
       chapters.push({
-        title: currentChapter.text,
-        content: processTextContent(chapterContent),
+        title: chapterTitle,
+        content: '',
+        startIndex: titleEndIndex + 1,
       });
     }
   }
 
-  return chapters.length > 0
-    ? chapters
+  // If no chapters detected, try a more lenient approach
+  if (chapters.length === 0) {
+    console.debug(
+      '[Chapter Detection] No strict chapters found, trying lenient detection...'
+    );
+
+    for (let i = 0; i < Math.min(100, lines.length); i++) {
+      // Check first 100 lines
+      const trimmed = lines[i].trim();
+      if (!trimmed) continue;
+
+      // Very simple chapter detection - just look for standalone numbers or Roman numerals
+      const isSimpleChapter =
+        // Standalone numbers 1-50
+        (/^\d{1,2}$/.test(trimmed) && parseInt(trimmed) <= 50) ||
+        // Roman numerals
+        /^[ivxlcdm]{1,8}$/i.test(trimmed) ||
+        // Explicit chapter words
+        /^(chapter|part|section)\s*\d+/i.test(trimmed);
+
+      if (isSimpleChapter) {
+        console.debug(
+          `[Chapter Detection] Simple chapter found at line ${i}: "${trimmed}"`
+        );
+        chapters.push({
+          title: trimmed,
+          content: '',
+          startIndex: i + 1,
+        });
+      }
+    }
+  }
+
+  // If still no chapters detected, return the entire content as one chapter
+  if (chapters.length === 0) {
+    console.debug(
+      '[Chapter Detection] No chapters detected, returning entire content as single chapter'
+    );
+    return [
+      {
+        title: 'Content',
+        content: text,
+      },
+    ];
+  }
+
+  console.debug(`[Chapter Detection] Found ${chapters.length} chapters`);
+
+  // Extract content for each chapter
+  const result: { title: string; content: string }[] = [];
+
+  for (let i = 0; i < chapters.length; i++) {
+    const chapter = chapters[i];
+    const nextChapter = chapters[i + 1];
+
+    const endIndex = nextChapter ? nextChapter.startIndex - 1 : lines.length;
+    const chapterLines = lines.slice(chapter.startIndex, endIndex);
+
+    // Clean up chapter content
+    const content = chapterLines
+      .join('\n')
+      .replace(/^\n+/, '') // Remove leading newlines
+      .replace(/\n+$/, '') // Remove trailing newlines
+      .replace(/\n{3,}/g, '\n\n'); // Reduce multiple newlines to double
+
+    // Debug: Log detected chapter split
+    console.debug(`[Chapter Split] Chapter ${i + 1}: "${chapter.title}"`);
+    console.debug(
+      `[Chapter Split] Content length: ${content.length} characters`
+    );
+    console.debug(
+      `[Chapter Split] Content preview: ${content.slice(0, 100)}...`
+    );
+
+    if (content.trim().length > 0) {
+      result.push({
+        title: chapter.title,
+        content: content,
+      });
+    }
+  }
+
+  return result.length > 0
+    ? result
     : [
         {
           title: 'Content',
-          content: processTextContent(lines.map((l) => l.trimmed).join('\n')),
+          content: text,
         },
       ];
 }
 
 /**
- * Extract text from PDF buffer using pdf-parse with smart chapter/paragraph detection (fallback)
+ * Extract text from PDF buffer with basic text extraction
  */
-async function extractTextFromPDF(
+async function extractTextWithStructure(
   buffer: Buffer
 ): Promise<{ title: string; content: string }[]> {
   try {
+    // Use pdf-parse to extract text
     const data = await pdf(buffer);
 
-    // Get raw text
-    let rawText = data.text;
+    // Remove page numbers first
+    const cleanedText = removePageNumbers(data.text);
 
-    // Apply smart text processing for books
-    let processedChapters = smartBookTextProcessing(rawText);
+    // Detect and split into chapters
+    const chapters = detectChapters(cleanedText);
 
-    return processedChapters;
+    return chapters;
   } catch (error) {
     console.error('Error extracting text from PDF:', error);
     throw new Error('Failed to extract text from PDF file');
@@ -474,144 +295,29 @@ async function extractTextFromPDF(
 }
 
 /**
- * Smart text processing for book content with chapter and paragraph detection
- * Returns an array of chapters with their titles and content
+ * Extract text from PDF buffer using basic pdf-parse
  */
-function smartBookTextProcessing(
-  text: string
-): { title: string; content: string }[] {
-  // Step 1: Normalize whitespace but preserve intentional breaks
-  let processed = text
-    // Remove excessive spaces but keep single spaces
-    .replace(/[ \t]+/g, ' ')
-    // Remove excessive newlines (3+ becomes 2)
-    .replace(/\n{3,}/g, '\n\n');
+async function extractTextFromPDF(
+  buffer: Buffer
+): Promise<{ title: string; content: string }[]> {
+  try {
+    const data = await pdf(buffer);
 
-  // Step 2: Detect chapter boundaries with markers
-  const chapterMarkers = [
-    // Chapter patterns with numbers
-    /^(Chapter\s+\d+)[\s\n]*(.*)$/gim,
-    /^(CHAPTER\s+\d+)[\s\n]*(.*)$/gim,
+    // Remove page numbers first
+    const cleanedText = removePageNumbers(data.text);
 
-    // Chapter patterns with Roman numerals
-    /^(Chapter\s+[IVX]+)[\s\n]*(.*)$/gim,
-    /^(CHAPTER\s+[IVX]+)[\s\n]*(.*)$/gim,
+    // Detect and split into chapters
+    const chapters = detectChapters(cleanedText);
 
-    // Part/Section patterns
-    /^(Part\s+\d+)[\s\n]*(.*)$/gim,
-    /^(PART\s+\d+)[\s\n]*(.*)$/gim,
-
-    // Generic numbered headings
-    /^(\d+\.\s+.{1,100})$/gm,
-    /^([IVX]+\.\s+.{1,100})$/gm,
-  ];
-
-  // Find all chapter positions
-  let chapterPositions: { index: number; title: string; fullMatch: string }[] =
-    [];
-
-  chapterMarkers.forEach((pattern) => {
-    let match;
-    pattern.lastIndex = 0; // Reset regex
-    while ((match = pattern.exec(processed)) !== null) {
-      const title = match[2]
-        ? `${match[1]}: ${match[2]}`.trim()
-        : match[1].trim();
-      chapterPositions.push({
-        index: match.index,
-        title: title,
-        fullMatch: match[0],
-      });
-    }
-  });
-
-  // Sort by position
-  chapterPositions.sort((a, b) => a.index - b.index);
-
-  // If no chapters found, return the whole text as one chapter
-  if (chapterPositions.length === 0) {
-    return [
-      {
-        title: 'Content',
-        content: processTextContent(processed),
-      },
-    ];
+    return chapters;
+  } catch (error) {
+    console.error('Error extracting text from PDF:', error);
+    throw new Error('Failed to extract text from PDF file');
   }
-
-  // Split text into chapters
-  const chapters: { title: string; content: string }[] = [];
-
-  for (let i = 0; i < chapterPositions.length; i++) {
-    const currentChapter = chapterPositions[i];
-    const nextChapter = chapterPositions[i + 1];
-
-    const startIndex = currentChapter.index;
-    const endIndex = nextChapter ? nextChapter.index : processed.length;
-
-    let chapterText = processed.substring(startIndex, endIndex);
-
-    // Remove the chapter header from content
-    chapterText = chapterText.replace(currentChapter.fullMatch, '').trim();
-
-    // Process the chapter content
-    const processedContent = processTextContent(chapterText);
-
-    if (processedContent.trim()) {
-      chapters.push({
-        title: currentChapter.title,
-        content: processedContent,
-      });
-    }
-  }
-
-  return chapters;
 }
 
 /**
- * Process individual chapter content
- */
-function processTextContent(text: string): string {
-  // Smart paragraph detection
-  let processed = text
-    // Split text into potential paragraphs
-    .split(/\n\s*\n/)
-    .map((paragraph) => {
-      // Clean each paragraph
-      let cleaned = paragraph
-        .replace(/\n/g, ' ') // Convert internal newlines to spaces
-        .replace(/\s+/g, ' ') // Normalize spaces
-        .trim();
-
-      // Skip empty paragraphs
-      if (!cleaned) return '';
-
-      // Detect if this is likely a subheading
-      if (
-        cleaned.length < 100 &&
-        !/[.!?]$/.test(cleaned) &&
-        (/^[A-Z\s]{5,}$/.test(cleaned) || /^\d+\./.test(cleaned))
-      ) {
-        return `### ${cleaned}`;
-      }
-
-      // Regular paragraph
-      return cleaned;
-    })
-    .filter((p) => p.length > 0)
-    .join('\n\n');
-
-  // Final cleanup
-  processed = processed
-    // Clean up excessive newlines
-    .replace(/\n{3,}/g, '\n\n')
-    // Trim
-    .trim();
-
-  return processed;
-}
-
-/**
- * Alternative: Extract text with page-based structure preservation
+ * Alternative: Extract text with basic structure preservation
  */
 async function extractTextWithPageStructure(
   buffer: Buffer
@@ -619,19 +325,15 @@ async function extractTextWithPageStructure(
   try {
     const data = await pdf(buffer);
 
-    // Process the full text but preserve more structure
-    let processedText = data.text
-      // Preserve page breaks (common patterns)
-      .replace(/\f/g, '\n\n--- Page Break ---\n\n')
-      // Preserve form feeds and page separators
-      .replace(/\x0C/g, '\n\n--- Page Break ---\n\n');
+    // Remove page numbers first
+    const cleanedText = removePageNumbers(data.text);
 
-    // Apply smart processing while preserving page structure
-    let processedChapters = smartBookTextProcessing(processedText);
+    // Detect and split into chapters
+    const chapters = detectChapters(cleanedText);
 
-    return processedChapters;
+    return chapters;
   } catch (error) {
-    console.error('Error extracting text with page structure:', error);
+    console.error('Error extracting text from PDF:', error);
     throw new Error('Failed to extract text from PDF file');
   }
 }
