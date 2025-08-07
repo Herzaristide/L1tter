@@ -356,9 +356,14 @@ const CreateBook: React.FC = () => {
               </div>
               {paragraphs.map((paragraph, index) => (
                 <div key={index} className='relative flex mt-2 mr-2'>
-                  {/* Delete button at top right */}
-
-                  {/* Paragraph content textarea */}
+                  <button
+                    type='button'
+                    onClick={() => removeParagraph(index)}
+                    className='absolute -top-2 -right-2 z-10 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full text-xs flex items-center justify-center'
+                    title='Delete paragraph'
+                  >
+                    ×
+                  </button>
                   <textarea
                     value={paragraph.content}
                     onChange={(e) => {
@@ -374,17 +379,10 @@ const CreateBook: React.FC = () => {
                         setTimeout(() => adjustTextareaHeight(el), 0);
                       }
                     }}
-                    className='w-full px-6 py-3 border rounded-2xl bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 resize-none text-sm h-fit'
+                    className='w-full px-6 py-3 border rounded-2xl bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 resize-none text-sm overflow-hidden'
                     placeholder='Paragraph content...'
+                    style={{ height: 'auto' }}
                   />
-                  <button
-                    type='button'
-                    onClick={() => removeParagraph(index)}
-                    className='absolute -top-2 -right-2 z-10 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full text-xs flex items-center justify-center'
-                    title='Delete paragraph'
-                  >
-                    ×
-                  </button>
                 </div>
               ))}
             </div>
