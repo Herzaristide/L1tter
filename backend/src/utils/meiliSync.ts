@@ -14,9 +14,23 @@ async function syncAllToMeili() {
         'description',
         'genre',
         'language',
+        'originalLanguage',
         'slug',
+        'workId',
+        'edition',
       ]);
-    const books = await prisma.book.findMany({ where: { deletedAt: null } });
+    const books = await prisma.book.findMany({
+      where: { deletedAt: null },
+      include: {
+        authors: {
+          include: {
+            author: true,
+          },
+        },
+        publisher: true,
+        collection: true,
+      },
+    });
     console.log(`Found ${books.length} books`);
     if (books.length > 0) {
       const bookResult = await meiliClient.index('books').addDocuments(books);
@@ -42,6 +56,10 @@ async function syncAllToMeili() {
       .updateSearchableAttributes(['name', 'description']);
     const collections = await prisma.collection.findMany({
       where: { deletedAt: null },
+      include: {
+        owner: true,
+        books: true,
+      },
     });
     console.log(`Found ${collections.length} collections`);
     if (collections.length > 0) {
@@ -56,27 +74,40 @@ async function syncAllToMeili() {
     await meiliClient
       .index('tags')
       .updateSearchableAttributes(['name', 'description']);
-    const tags = await prisma.tag.findMany({ where: { deletedAt: null } });
+    const tags = await prisma.tag.findMany({
+      where: { deletedAt: null },
+      include: {
+        creator: true,
+      },
+    });
     console.log(`Found ${tags.length} tags`);
     if (tags.length > 0) {
       const tagResult = await meiliClient.index('tags').addDocuments(tags);
       console.log(`Tags sync result:`, tagResult);
     }
 
-    // Chapter
-    await meiliClient.createIndex('chapters', { primaryKey: 'id' });
+    // Paragraph (replaces Chapter)
+    await meiliClient.createIndex('paragraphs', { primaryKey: 'id' });
     await meiliClient
-      .index('chapters')
-      .updateSearchableAttributes(['title', 'content', 'order', 'bookId']);
-    const chapters = await prisma.chapter.findMany({
+      .index('paragraphs')
+      .updateSearchableAttributes([
+        'content',
+        'chapterNumber',
+        'order',
+        'bookId',
+      ]);
+    const paragraphs = await prisma.paragraph.findMany({
       where: { deletedAt: null },
+      include: {
+        book: true,
+      },
     });
-    console.log(`Found ${chapters.length} chapters`);
-    if (chapters.length > 0) {
-      const chapterResult = await meiliClient
-        .index('chapters')
-        .addDocuments(chapters);
-      console.log(`Chapters sync result:`, chapterResult);
+    console.log(`Found ${paragraphs.length} paragraphs`);
+    if (paragraphs.length > 0) {
+      const paragraphResult = await meiliClient
+        .index('paragraphs')
+        .addDocuments(paragraphs);
+      console.log(`Paragraphs sync result:`, paragraphResult);
     }
 
     // Note
@@ -88,8 +119,17 @@ async function syncAllToMeili() {
         'firstContent',
         'secondContent',
         'thirdContent',
+        'selectedText',
+        'noteType',
       ]);
-    const notes = await prisma.note.findMany({ where: { deletedAt: null } });
+    const notes = await prisma.note.findMany({
+      where: { deletedAt: null },
+      include: {
+        user: true,
+        book: true,
+        paragraph: true,
+      },
+    });
     console.log(`Found ${notes.length} notes`);
     if (notes.length > 0) {
       const noteResult = await meiliClient.index('notes').addDocuments(notes);
@@ -103,6 +143,13 @@ async function syncAllToMeili() {
       .updateSearchableAttributes(['name', 'bio']);
     const authors = await prisma.author.findMany({
       where: { deletedAt: null },
+      include: {
+        books: {
+          include: {
+            book: true,
+          },
+        },
+      },
     });
     console.log(`Found ${authors.length} authors`);
     if (authors.length > 0) {
@@ -116,9 +163,17 @@ async function syncAllToMeili() {
     await meiliClient.createIndex('publishers', { primaryKey: 'id' });
     await meiliClient
       .index('publishers')
-      .updateSearchableAttributes(['name', 'description', 'country']);
+      .updateSearchableAttributes([
+        'name',
+        'description',
+        'country',
+        'website',
+      ]);
     const publishers = await prisma.publisher.findMany({
       where: { deletedAt: null },
+      include: {
+        books: true,
+      },
     });
     console.log(`Found ${publishers.length} publishers`);
     if (publishers.length > 0) {
@@ -126,6 +181,77 @@ async function syncAllToMeili() {
         .index('publishers')
         .addDocuments(publishers);
       console.log(`Publishers sync result:`, publisherResult);
+    }
+
+    // Progress
+    await meiliClient.createIndex('progress', { primaryKey: 'id' });
+    await meiliClient
+      .index('progress')
+      .updateSearchableAttributes(['userId', 'paragraphId']);
+    const progress = await prisma.progress.findMany({
+      include: {
+        user: true,
+        paragraph: {
+          include: {
+            book: true,
+          },
+        },
+      },
+    });
+    console.log(`Found ${progress.length} progress records`);
+    if (progress.length > 0) {
+      const progressResult = await meiliClient
+        .index('progress')
+        .addDocuments(progress);
+      console.log(`Progress sync result:`, progressResult);
+    }
+
+    // Book Ratings
+    await meiliClient.createIndex('book-ratings', { primaryKey: 'id' });
+    await meiliClient
+      .index('book-ratings')
+      .updateSearchableAttributes(['comment', 'rating']);
+    const bookRatings = await prisma.bookRating.findMany({
+      include: {
+        user: true,
+        book: true,
+      },
+    });
+    console.log(`Found ${bookRatings.length} book ratings`);
+    if (bookRatings.length > 0) {
+      const bookRatingResult = await meiliClient
+        .index('book-ratings')
+        .addDocuments(bookRatings);
+      console.log(`Book ratings sync result:`, bookRatingResult);
+    }
+
+    // Reports (Admin only content)
+    await meiliClient.createIndex('reports', { primaryKey: 'id' });
+    await meiliClient
+      .index('reports')
+      .updateSearchableAttributes([
+        'description',
+        'reportType',
+        'status',
+        'adminNotes',
+      ]);
+    const reports = await prisma.report.findMany({
+      include: {
+        user: true,
+        book: true,
+        paragraph: true,
+        author: true,
+        publisher: true,
+        note: true,
+        resolver: true,
+      },
+    });
+    console.log(`Found ${reports.length} reports`);
+    if (reports.length > 0) {
+      const reportResult = await meiliClient
+        .index('reports')
+        .addDocuments(reports);
+      console.log(`Reports sync result:`, reportResult);
     }
 
     console.log('Meilisearch sync complete!');

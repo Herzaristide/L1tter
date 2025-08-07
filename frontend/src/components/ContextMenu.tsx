@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { translateService } from '../services/translateService';
 
 interface ContextMenuProps {
   x: number;
@@ -16,6 +17,9 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
   onAction,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [frenchTranslation, setFrenchTranslation] = useState<string>('');
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState<string>('');
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -39,6 +43,29 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
     };
   }, [onClose]);
 
+  // Translate selected text to French when component mounts
+  useEffect(() => {
+    const translateText = async () => {
+      if (!selectedText.trim()) return;
+
+      setIsTranslating(true);
+      setTranslationError('');
+
+      try {
+        const result = await translateService.translateToFrench(selectedText);
+        setFrenchTranslation(result.translatedText);
+      } catch (error) {
+        console.error('Translation failed:', error);
+        setTranslationError('Translation unavailable');
+        setFrenchTranslation(selectedText); // Fallback to original text
+      } finally {
+        setIsTranslating(false);
+      }
+    };
+
+    translateText();
+  }, [selectedText]);
+
   const menuItems = [
     {
       label: 'Copy',
@@ -55,6 +82,25 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
             strokeLinejoin='round'
             strokeWidth={2}
             d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z'
+          />
+        </svg>
+      ),
+    },
+    {
+      label: 'Copy Translation',
+      action: 'copy-translation',
+      icon: (
+        <svg
+          className='w-4 h-4'
+          fill='none'
+          stroke='currentColor'
+          viewBox='0 0 24 24'
+        >
+          <path
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            strokeWidth={2}
+            d='M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z'
           />
         </svg>
       ),
@@ -119,13 +165,20 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
   ];
 
   const handleItemClick = (action: string) => {
-    onAction(action, selectedText);
+    if (action === 'copy-translation') {
+      // Pass the French translation to the action handler
+      onAction(action, frenchTranslation || selectedText);
+    } else {
+      // Pass the original selected text for other actions
+      onAction(action, selectedText);
+    }
     onClose();
   };
 
   return (
     <div
       ref={menuRef}
+      data-context-menu
       className='fixed z-50 bg-white dark:bg-black border border-gray-200 dark:border-gray-800 shadow-xl min-w-48'
       style={{
         left: x,
@@ -134,16 +187,27 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
     >
       {/* Header */}
       <div className='px-4 py-3 border-b border-gray-100 dark:border-gray-800'>
-        <p className='text-xs font-light text-gray-500 dark:text-gray-400 tracking-wider uppercase'>
-          Selected Text
-        </p>
-        <p className='text-sm font-light text-black dark:text-white mt-1 truncate max-w-48'>
-          "
-          {selectedText.length > 50
-            ? selectedText.substring(0, 50) + '...'
-            : selectedText}
-          "
-        </p>
+        <div className='text-lg flex items-center gap-2 mb-2'>
+          {isTranslating && (
+            <div className='w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin'></div>
+          )}
+        </div>
+
+        {translationError ? (
+          <p className='font-light text-red-500 dark:text-red-400 mt-1'>
+            {translationError}
+          </p>
+        ) : (
+          <p className=' font-light text-black dark:text-white mt-1 max-w-48'>
+            {isTranslating
+              ? 'Translating...'
+              : frenchTranslation.length > 50
+              ? frenchTranslation.substring(0, 50) + '...'
+              : frenchTranslation}
+          </p>
+        )}
+
+        {/* Original text (smaller) */}
       </div>
 
       {/* Menu Items */}
@@ -162,13 +226,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
             <span>{item.label}</span>
           </button>
         ))}
-      </div>
-
-      {/* Footer */}
-      <div className='px-4 py-2 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900'>
-        <p className='text-xs font-light text-gray-400 tracking-wide'>
-          {selectedText.split(' ').length} words selected
-        </p>
       </div>
     </div>
   );

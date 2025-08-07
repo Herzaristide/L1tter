@@ -29,12 +29,12 @@ const Reading: React.FC = () => {
   }, [bookId]);
 
   const handleTextSelection = (event: React.MouseEvent) => {
+    // Handle right-click context menu
     event.preventDefault();
     const selection = window.getSelection();
 
     if (selection && selection.toString().trim().length > 0) {
       const selectedText = selection.toString().trim();
-      const rect = selection.getRangeAt(0).getBoundingClientRect();
 
       setContextMenu({
         x: event.clientX,
@@ -44,11 +44,35 @@ const Reading: React.FC = () => {
     }
   };
 
+  const handleMouseUp = () => {
+    // Auto-show context menu on text selection
+    setTimeout(() => {
+      const selection = window.getSelection();
+
+      if (selection && selection.toString().trim().length > 0) {
+        const selectedText = selection.toString().trim();
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+
+        // Position menu near the end of selection
+        setContextMenu({
+          x: rect.right + 10,
+          y: rect.top - 10,
+          selectedText,
+        });
+      }
+    }, 100); // Small delay to ensure selection is complete
+  };
+
   const handleContextMenuAction = (action: string, text: string) => {
     switch (action) {
       case 'copy':
         navigator.clipboard.writeText(text);
-        console.log('Copied to clipboard:', text);
+        console.log('Copied original text to clipboard:', text);
+        break;
+      case 'copy-translation':
+        navigator.clipboard.writeText(text);
+        console.log('Copied French translation to clipboard:', text);
         break;
       case 'highlight':
         console.log('Highlight text:', text);
@@ -72,6 +96,35 @@ const Reading: React.FC = () => {
     // Clear text selection
     window.getSelection()?.removeAllRanges();
   };
+
+  // Close context menu when clicking elsewhere or when selection changes
+  useEffect(() => {
+    const handleMouseDown = (event: MouseEvent) => {
+      // Close menu if clicking outside of it
+      if (contextMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('[data-context-menu]')) {
+          setContextMenu(null);
+        }
+      }
+    };
+
+    const handleSelectionChange = () => {
+      // Close menu if selection is cleared
+      const selection = window.getSelection();
+      if (!selection || selection.toString().trim().length === 0) {
+        setContextMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('selectionchange', handleSelectionChange);
+
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('selectionchange', handleSelectionChange);
+    };
+  }, [contextMenu]);
 
   if (loading) {
     return (
@@ -160,6 +213,7 @@ const Reading: React.FC = () => {
                 <div
                   className='max-w-none text-black dark:text-white leading-loose tracking-wide font-light text-lg select-text text-justify'
                   onContextMenu={handleTextSelection}
+                  onMouseUp={handleMouseUp}
                 >
                   <p className='mb-8'>{paragraph.content}</p>
                 </div>
