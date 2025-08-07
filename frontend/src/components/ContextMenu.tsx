@@ -1,10 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { translateService } from '../services/translateService';
+import { notesService } from '../services/notesService';
 
 interface ContextMenuProps {
   x: number;
   y: number;
   selectedText: string;
+  bookId?: string;
+  paragraphId?: string;
+  startIndex?: number;
+  endIndex?: number;
   onClose: () => void;
   onAction: (action: string, text: string) => void;
 }
@@ -13,6 +18,10 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
   x,
   y,
   selectedText,
+  bookId,
+  paragraphId,
+  startIndex,
+  endIndex,
   onClose,
   onAction,
 }) => {
@@ -20,6 +29,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
   const [frenchTranslation, setFrenchTranslation] = useState<string>('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState<string>('');
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -65,6 +75,36 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
 
     translateText();
   }, [selectedText]);
+
+  // Create note with selected text
+  const createNote = async () => {
+    if (!bookId || !paragraphId) {
+      console.error('Missing bookId or paragraphId for note creation');
+      return;
+    }
+
+    setIsCreatingNote(true);
+    try {
+      await notesService.createNote({
+        bookId,
+        paragraphId,
+        startIndex,
+        endIndex,
+        selectedText: selectedText.trim(),
+        text: `Note for: "${selectedText.trim()}"`,
+        noteType: 'highlight',
+        isPublic: false,
+      });
+
+      console.log('Note created successfully');
+      onAction('note-created', selectedText);
+    } catch (error) {
+      console.error('Failed to create note:', error);
+      onAction('note-error', selectedText);
+    } finally {
+      setIsCreatingNote(false);
+    }
+  };
 
   const menuItems = [
     {
@@ -125,9 +165,12 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
       ),
     },
     {
-      label: 'Add Note',
+      label: isCreatingNote ? 'Adding Note...' : 'Add Note',
       action: 'note',
-      icon: (
+      disabled: isCreatingNote,
+      icon: isCreatingNote ? (
+        <div className='w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin'></div>
+      ) : (
         <svg
           className='w-4 h-4'
           fill='none'
@@ -168,12 +211,40 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
     if (action === 'copy-translation') {
       // Pass the French translation to the action handler
       onAction(action, frenchTranslation || selectedText);
+      onClose();
+    } else if (action === 'note') {
+      // Create note with selected text
+      createNote();
+      onClose();
     } else {
       // Pass the original selected text for other actions
       onAction(action, selectedText);
+      onClose();
     }
-    onClose();
   };
+
+  // Calculate menu position to avoid overflow
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({
+    left: x,
+    top: y,
+  });
+  useEffect(() => {
+    if (!menuRef.current) return;
+    const menuRect = menuRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    let left = x;
+    let top = y;
+    // If menu overflows right, move left
+    if (x + menuRect.width > viewportWidth) {
+      left = Math.max(viewportWidth - menuRect.width - 8, 8); // 8px margin
+    }
+    // If menu overflows bottom, move up
+    if (y + menuRect.height > viewportHeight) {
+      top = Math.max(viewportHeight - menuRect.height - 8, 8);
+    }
+    setMenuPos({ left, top });
+  }, [x, y, frenchTranslation, isTranslating, translationError]);
 
   return (
     <div
@@ -181,8 +252,11 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
       data-context-menu
       className='fixed z-50 bg-white dark:bg-black border border-gray-200 dark:border-gray-800 shadow-xl min-w-48'
       style={{
-        left: x,
-        top: y,
+        left: menuPos.left,
+        top: menuPos.top,
+        maxWidth: '90vw',
+        maxHeight: '90vh',
+        overflowY: 'auto',
       }}
     >
       {/* Header */}
@@ -216,9 +290,14 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
           <button
             key={index}
             onClick={() => handleItemClick(item.action)}
-            className='w-full flex items-center px-4 py-3 text-left text-black dark:text-white
-              hover:bg-gray-50 dark:hover:bg-gray-900 transition-all duration-200
-              font-light tracking-wide text-sm'
+            disabled={item.disabled}
+            className={`w-full flex items-center px-4 py-3 text-left text-black dark:text-white
+              transition-all duration-200 font-light tracking-wide text-sm
+              ${
+                item.disabled
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'hover:bg-gray-50 dark:hover:bg-gray-900'
+              }`}
           >
             <div className='w-4 h-4 mr-3 flex items-center justify-center'>
               {item.icon}

@@ -16,16 +16,19 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     const searchLimit = parseInt(limit as string);
     const searchQuery = q as string;
 
-    // Define all the indexes/tables to search (new schema only)
+    // Define all the indexes/tables to search (updated schema)
     const searchIndexes = [
       { name: 'users', type: 'user' },
       { name: 'collections', type: 'collection' },
       { name: 'books', type: 'book' },
       { name: 'tags', type: 'tag' },
-      { name: 'chapters', type: 'chapter' },
+      { name: 'paragraphs', type: 'paragraph' }, // Updated from chapters
       { name: 'notes', type: 'note' },
       { name: 'authors', type: 'author' },
       { name: 'publishers', type: 'publisher' },
+      { name: 'progress', type: 'progress' },
+      { name: 'book-ratings', type: 'book-rating' },
+      // Note: reports index excluded from general search for privacy
     ];
 
     // Search all indexes in parallel
@@ -91,8 +94,10 @@ router.get(
         .index('books')
         .search(q as string, {
           limit: searchLimit,
-          filter: `isPublic = true OR userId = "${req.user?.id || ''}"`,
-          attributesToHighlight: ['title'],
+          filter: `(isPublic = true OR userId = "${
+            req.user?.id || ''
+          }") AND deletedAt IS NULL`,
+          attributesToHighlight: ['title', 'description'],
         })
         .catch(() => ({ hits: [] }));
 
@@ -119,7 +124,7 @@ router.get(
 
       const searchLimit = parseInt(limit as string);
 
-      // Map types to indexes (new schema only)
+      // Map types to indexes (updated schema)
       const typeToIndex: Record<string, string> = {
         user: 'users',
         users: 'users',
@@ -129,14 +134,19 @@ router.get(
         books: 'books',
         tag: 'tags',
         tags: 'tags',
-        chapter: 'chapters',
-        chapters: 'chapters',
+        paragraph: 'paragraphs', // Updated from chapter
+        paragraphs: 'paragraphs', // Updated from chapters
         note: 'notes',
         notes: 'notes',
         author: 'authors',
         authors: 'authors',
         publisher: 'publishers',
         publishers: 'publishers',
+        progress: 'progress',
+        'book-rating': 'book-ratings',
+        'book-ratings': 'book-ratings',
+        rating: 'book-ratings',
+        ratings: 'book-ratings',
       };
 
       const indexName = typeToIndex[type.toLowerCase()];
@@ -164,6 +174,146 @@ router.get(
       res
         .status(500)
         .json({ error: `Search failed for type: ${req.params.type}` });
+    }
+  }
+);
+
+// Admin-only: Search reports
+router.get(
+  '/reports',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      // Check if user is admin
+      if (req.user?.role !== 'ADMIN') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const { q, status, reportType, limit = '50' } = req.query;
+      const searchLimit = parseInt(limit as string);
+
+      let filter = '';
+      const filters = [];
+
+      if (status && typeof status === 'string') {
+        filters.push(`status = "${status}"`);
+      }
+
+      if (reportType && typeof reportType === 'string') {
+        filters.push(`reportType = "${reportType}"`);
+      }
+
+      if (filters.length > 0) {
+        filter = filters.join(' AND ');
+      }
+
+      const searchOptions: any = {
+        limit: searchLimit,
+        attributesToHighlight: ['description', 'adminNotes'],
+      };
+
+      if (filter) {
+        searchOptions.filter = filter;
+      }
+
+      const result = await meiliClient
+        .index('reports')
+        .search((q as string) || '', searchOptions);
+
+      res.json({
+        results: result.hits.map((hit) => ({
+          ...hit,
+          type: 'report',
+        })),
+        query: q || '',
+        total: result.hits.length,
+        estimatedTotalHits: result.estimatedTotalHits,
+        appliedFilters: { status, reportType },
+      });
+    } catch (error) {
+      console.error('Reports search error:', error);
+      res.status(500).json({ error: 'Reports search failed' });
+    }
+  }
+);
+
+// Search user's progress
+router.get(
+  '/progress',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { q, limit = '20' } = req.query;
+      const searchLimit = parseInt(limit as string);
+
+      const searchOptions: any = {
+        limit: searchLimit,
+        filter: `userId = "${req.user?.id}"`,
+        attributesToHighlight: ['*'],
+      };
+
+      const result = await meiliClient
+        .index('progress')
+        .search((q as string) || '', searchOptions);
+
+      res.json({
+        results: result.hits.map((hit) => ({
+          ...hit,
+          type: 'progress',
+        })),
+        query: q || '',
+        total: result.hits.length,
+        estimatedTotalHits: result.estimatedTotalHits,
+      });
+    } catch (error) {
+      console.error('Progress search error:', error);
+      res.status(500).json({ error: 'Progress search failed' });
+    }
+  }
+);
+
+// Search user's ratings
+router.get(
+  '/ratings',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { q, minRating, maxRating, limit = '20' } = req.query;
+      const searchLimit = parseInt(limit as string);
+
+      const filters = [`userId = "${req.user?.id}"`];
+
+      if (minRating && typeof minRating === 'string') {
+        filters.push(`rating >= ${parseInt(minRating)}`);
+      }
+
+      if (maxRating && typeof maxRating === 'string') {
+        filters.push(`rating <= ${parseInt(maxRating)}`);
+      }
+
+      const searchOptions: any = {
+        limit: searchLimit,
+        filter: filters.join(' AND '),
+        attributesToHighlight: ['comment'],
+      };
+
+      const result = await meiliClient
+        .index('book-ratings')
+        .search((q as string) || '', searchOptions);
+
+      res.json({
+        results: result.hits.map((hit) => ({
+          ...hit,
+          type: 'book-rating',
+        })),
+        query: q || '',
+        total: result.hits.length,
+        estimatedTotalHits: result.estimatedTotalHits,
+        appliedFilters: { minRating, maxRating },
+      });
+    } catch (error) {
+      console.error('Ratings search error:', error);
+      res.status(500).json({ error: 'Ratings search failed' });
     }
   }
 );
