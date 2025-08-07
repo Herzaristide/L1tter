@@ -10,7 +10,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const {
       bookId,
-      chapterId,
+      paragraphId,
       isPublic,
       search,
       page = '1',
@@ -28,7 +28,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         { sharedWith: { some: { userId: req.user!.id } } }, // Shared notes
       ],
       ...(bookId ? { bookId } : {}),
-      ...(chapterId ? { chapterId } : {}),
+      ...(paragraphId ? { paragraphId } : {}),
       ...(isPublic === 'true' ? { isPublic: true } : {}),
     };
 
@@ -70,12 +70,15 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         book: {
           select: {
             id: true,
+            title: true,
           },
         },
-        chapter: {
+        paragraph: {
           select: {
             id: true,
             order: true,
+            chapterNumber: true,
+            content: true,
           },
         },
         tags: {
@@ -153,12 +156,15 @@ router.get(
           book: {
             select: {
               id: true,
+              title: true,
             },
           },
-          chapter: {
+          paragraph: {
             select: {
               id: true,
               order: true,
+              chapterNumber: true,
+              content: true,
             },
           },
           tags: {
@@ -211,13 +217,15 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const {
       bookId,
-      chapterId,
+      paragraphId,
       startIndex,
       endIndex,
+      selectedText,
       text,
       firstContent,
       secondContent,
       thirdContent,
+      noteType = 'comment',
       isPublic = false,
       tagIds = [],
     } = req.body;
@@ -228,13 +236,15 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         data: {
           userId: req.user!.id,
           bookId,
-          chapterId,
+          paragraphId,
           startIndex,
           endIndex,
+          selectedText,
           text,
           firstContent,
           secondContent,
           thirdContent,
+          noteType,
           isPublic,
           createdBy: req.user!.id,
         },
@@ -267,12 +277,15 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         book: {
           select: {
             id: true,
+            title: true,
           },
         },
-        chapter: {
+        paragraph: {
           select: {
             id: true,
             order: true,
+            chapterNumber: true,
+            content: true,
           },
         },
         tags: {
@@ -300,7 +313,14 @@ router.put(
   async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const { firstContent, secondContent, thirdContent, isPublic } = req.body;
+      const {
+        text,
+        firstContent,
+        secondContent,
+        thirdContent,
+        noteType,
+        isPublic,
+      } = req.body;
 
       // Check if user owns the note
       const existingNote = await prisma.note.findUnique({
@@ -319,9 +339,11 @@ router.put(
       const note = await prisma.note.update({
         where: { id },
         data: {
+          text,
           firstContent,
           secondContent,
           thirdContent,
+          noteType,
           isPublic,
           updatedBy: req.user!.id,
           updatedAt: new Date(),
@@ -337,12 +359,15 @@ router.put(
           book: {
             select: {
               id: true,
+              title: true,
             },
           },
-          chapter: {
+          paragraph: {
             select: {
               id: true,
               order: true,
+              chapterNumber: true,
+              content: true,
             },
           },
           tags: {

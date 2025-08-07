@@ -1,6 +1,11 @@
 import api from './api';
 
-export type ConversionMode = 'structure' | 'smart' | 'page-structure' | 'raw';
+export type ConversionMode =
+  | 'paragraphs'
+  | 'structure'
+  | 'smart'
+  | 'page-structure'
+  | 'raw';
 
 export interface Chapter {
   title: string;
@@ -11,7 +16,7 @@ export const convertService = {
   /**
    * Convert PDF file to text using the backend API
    * @param file - The PDF file to convert
-   * @param mode - Processing mode: 'structure' (default), 'smart', 'page-structure', or 'raw'
+   * @param mode - Processing mode: 'paragraphs', 'structure' (default), 'smart', 'page-structure', or 'raw'
    * @returns Promise<Chapter[]> - The extracted chapters
    */
   async convertPdfToText(
@@ -45,7 +50,7 @@ export const convertService = {
   /**
    * Convert PDF from URL to text using the backend API
    * @param url - The URL of the PDF file to convert
-   * @param mode - Processing mode: 'structure' (default), 'smart', 'page-structure', or 'raw'
+   * @param mode - Processing mode: 'paragraphs', 'structure' (default), 'smart', 'page-structure', or 'raw'
    * @returns Promise<Chapter[]> - The extracted chapters
    */
   async convertPdfFromUrl(

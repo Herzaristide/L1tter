@@ -1,6 +1,10 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middleware/auth';
+import {
+  authenticateToken,
+  AuthRequest,
+  requireAdmin,
+} from '../middleware/auth';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -105,127 +109,115 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/publishers - Create new publisher (admin only)
-router.post('/', authenticateToken, async (req, res) => {
-  try {
-    const { name, description, website, address, foundedYear, country } =
-      req.body;
+router.post(
+  '/',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res) => {
+    try {
+      const { name, description, website, address, foundedYear, country } =
+        req.body;
 
-    if (!name) {
-      return res.status(400).json({ error: 'Publisher name is required' });
+      if (!name) {
+        return res.status(400).json({ error: 'Publisher name is required' });
+      }
+
+      const publisher = await prisma.publisher.create({
+        data: {
+          name,
+          description,
+          website,
+          address,
+          foundedYear: foundedYear ? parseInt(foundedYear) : null,
+          country,
+        },
+      });
+
+      res.status(201).json(publisher);
+    } catch (error) {
+      console.error('Error creating publisher:', error);
+      res.status(500).json({ error: 'Failed to create publisher' });
     }
-
-    // Check if user is admin
-    const user = await prisma.user.findUnique({
-      where: { id: (req as any).user.userId },
-    });
-
-    if (!user || user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const publisher = await prisma.publisher.create({
-      data: {
-        name,
-        description,
-        website,
-        address,
-        foundedYear: foundedYear ? parseInt(foundedYear) : null,
-        country,
-      },
-    });
-
-    res.status(201).json(publisher);
-  } catch (error) {
-    console.error('Error creating publisher:', error);
-    res.status(500).json({ error: 'Failed to create publisher' });
   }
-});
+);
 
 // PUT /api/publishers/:id - Update publisher (admin only)
-router.put('/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description, website, address, foundedYear, country } =
-      req.body;
+router.put(
+  '/:id',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { name, description, website, address, foundedYear, country } =
+        req.body;
 
-    // Check if user is admin
-    const user = await prisma.user.findUnique({
-      where: { id: (req as any).user.userId },
-    });
+      const publisher = await prisma.publisher.findFirst({
+        where: {
+          id,
+          deletedAt: null,
+        },
+      });
 
-    if (!user || user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Admin access required' });
+      if (!publisher) {
+        return res.status(404).json({ error: 'Publisher not found' });
+      }
+
+      const updatedPublisher = await prisma.publisher.update({
+        where: { id },
+        data: {
+          name: name || publisher.name,
+          description,
+          website,
+          address,
+          foundedYear: foundedYear ? parseInt(foundedYear) : null,
+          country,
+        },
+      });
+
+      res.json(updatedPublisher);
+    } catch (error) {
+      console.error('Error updating publisher:', error);
+      res.status(500).json({ error: 'Failed to update publisher' });
     }
-
-    const publisher = await prisma.publisher.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
-    });
-
-    if (!publisher) {
-      return res.status(404).json({ error: 'Publisher not found' });
-    }
-
-    const updatedPublisher = await prisma.publisher.update({
-      where: { id },
-      data: {
-        name: name || publisher.name,
-        description,
-        website,
-        address,
-        foundedYear: foundedYear ? parseInt(foundedYear) : null,
-        country,
-      },
-    });
-
-    res.json(updatedPublisher);
-  } catch (error) {
-    console.error('Error updating publisher:', error);
-    res.status(500).json({ error: 'Failed to update publisher' });
   }
-});
+);
 
 // DELETE /api/publishers/:id - Delete publisher (admin only)
-router.delete('/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
+router.delete(
+  '/:id',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
 
-    // Check if user is admin
-    const user = await prisma.user.findUnique({
-      where: { id: (req as any).user.userId },
-    });
+      const publisher = await prisma.publisher.findFirst({
+        where: {
+          id,
+          deletedAt: null,
+        },
+      });
 
-    if (!user || user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Admin access required' });
+      if (!publisher) {
+        return res.status(404).json({ error: 'Publisher not found' });
+      }
+
+      // Soft delete
+      await prisma.publisher.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+        },
+      });
+
+      res.json({ message: 'Publisher deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting publisher:', error);
+      res.status(500).json({ error: 'Failed to delete publisher' });
     }
-
-    const publisher = await prisma.publisher.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
-    });
-
-    if (!publisher) {
-      return res.status(404).json({ error: 'Publisher not found' });
-    }
-
-    // Soft delete
-    await prisma.publisher.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
-
-    res.json({ message: 'Publisher deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting publisher:', error);
-    res.status(500).json({ error: 'Failed to delete publisher' });
   }
-});
+);
 
 // GET /api/publishers/:id/books - Get books by publisher
 router.get('/:id/books', async (req, res) => {
@@ -271,7 +263,7 @@ router.get('/:id/books', async (req, res) => {
           },
         },
         _count: {
-          select: { chapters: true },
+          select: { paragraphs: true },
         },
       },
       orderBy: { editionPublished: 'desc' },

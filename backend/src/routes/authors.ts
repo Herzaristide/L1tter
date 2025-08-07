@@ -174,7 +174,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
                   select: { rating: true },
                 },
                 _count: {
-                  select: { chapters: true, ratings: true },
+                  select: { paragraphs: true, ratings: true },
                 },
               },
             },
@@ -405,61 +405,6 @@ router.delete(
       res.json({ message: 'Link deleted successfully' });
     } catch (error) {
       console.error('Delete author link error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-);
-
-// Rate author
-router.post(
-  '/:id/rate',
-  authenticateToken,
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { rating, comment } = req.body;
-
-      if (rating < 1 || rating > 5) {
-        return res
-          .status(400)
-          .json({ error: 'Rating must be between 1 and 5' });
-      }
-
-      const authorRating = await prisma.authorRating.upsert({
-        where: {
-          userId_authorId: {
-            userId: req.user!.id,
-            authorId: id,
-          },
-        },
-        update: {
-          rating,
-          comment,
-          updatedAt: new Date(),
-        },
-        create: {
-          userId: req.user!.id,
-          authorId: id,
-          rating,
-          comment,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              imageUrl: true,
-            },
-          },
-        },
-      });
-
-      res.json({
-        message: 'Rating saved successfully',
-        rating: authorRating,
-      });
-    } catch (error) {
-      console.error('Rate author error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

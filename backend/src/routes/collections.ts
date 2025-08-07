@@ -68,7 +68,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
             },
             _count: {
               select: {
-                chapters: true,
+                paragraphs: true,
                 ratings: true,
               },
             },
@@ -159,7 +159,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
             },
             _count: {
               select: {
-                chapters: true,
+                paragraphs: true,
                 ratings: true,
               },
             },

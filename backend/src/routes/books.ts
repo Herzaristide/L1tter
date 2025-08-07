@@ -80,7 +80,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         collection: { select: { id: true, name: true, description: true } },
         user: { select: { id: true, name: true, imageUrl: true } },
         ratings: { select: { rating: true } },
-        _count: { select: { chapters: true, ratings: true } },
+        _count: { select: { paragraphs: true, ratings: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -124,25 +124,28 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   });
   try {
     const { id } = req.params;
-    const { chapterId } = req.query;
-    if (chapterId) {
-      // Fetch a single chapter for this book
-      const chapter = await prisma.chapter.findFirst({
-        where: { id: chapterId as string, bookId: id, deletedAt: null },
+    const { paragraphId } = req.query;
+
+    if (paragraphId) {
+      // Fetch a single paragraph for this book
+      const paragraph = await prisma.paragraph.findFirst({
+        where: { id: paragraphId as string, bookId: id, deletedAt: null },
         select: {
           id: true,
-          title: true,
           content: true,
           order: true,
+          chapterNumber: true,
           readingTimeEst: true,
           createdAt: true,
           updatedAt: true,
         },
       });
-      if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
-      return res.json(chapter);
+      if (!paragraph)
+        return res.status(404).json({ error: 'Paragraph not found' });
+      return res.json(paragraph);
     }
-    // Default: fetch book with all chapters
+
+    // Default: fetch book with all paragraphs
     const book = await prisma.book.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -158,13 +161,13 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
           orderBy: { position: 'asc' },
         },
         publisher: true,
-        chapters: {
+        paragraphs: {
           where: { deletedAt: null },
           select: {
             id: true,
-            title: true,
             content: true,
             order: true,
+            chapterNumber: true,
             readingTimeEst: true,
             createdAt: true,
           },
@@ -181,7 +184,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
           },
           orderBy: { createdAt: 'desc' },
         },
-        _count: { select: { chapters: true, ratings: true, Note: true } },
+        _count: { select: { paragraphs: true, ratings: true, Note: true } },
       },
     });
     if (!book) return res.status(404).json({ error: 'Book not found' });
@@ -225,7 +228,7 @@ router.get('/work/:workId', async (req: AuthRequest, res: Response) => {
         },
         publisher: { select: { id: true, name: true, country: true } },
         ratings: { select: { rating: true } },
-        _count: { select: { chapters: true, ratings: true } },
+        _count: { select: { paragraphs: true, ratings: true } },
       },
       orderBy: [{ language: 'asc' }, { editionPublished: 'desc' }],
     });
@@ -274,6 +277,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       slug,
       genre,
       isPublic = false,
+      isDraft = true,
       authorIds = [],
       tagIds = [],
     } = req.body;
@@ -297,6 +301,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         slug,
         genre,
         isPublic,
+        isDraft,
         createdBy: req.user!.id,
       },
     });
@@ -362,6 +367,7 @@ router.put(
         slug,
         genre,
         isPublic,
+        isDraft,
         authorIds,
         tagIds,
       } = req.body;
@@ -407,6 +413,7 @@ router.put(
           slug: slug !== undefined ? slug : book.slug,
           genre: genre !== undefined ? genre : book.genre,
           isPublic: isPublic !== undefined ? isPublic : book.isPublic,
+          isDraft: isDraft !== undefined ? isDraft : book.isDraft,
           updatedBy: req.user!.id,
         },
       });
@@ -486,136 +493,154 @@ router.delete(
   }
 );
 
-// Rate a book
+// Create a new paragraph
 router.post(
-  '/:id/rate',
-  authenticateToken,
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { rating, comment } = req.body;
-      if (!rating || rating < 1 || rating > 5) {
-        return res
-          .status(400)
-          .json({ error: 'Rating must be between 1 and 5' });
-      }
-      const book = await prisma.book.findFirst({
-        where: { id, deletedAt: null },
-      });
-      if (!book) return res.status(404).json({ error: 'Book not found' });
-      const bookRating = await prisma.bookRating.upsert({
-        where: {
-          userId_bookId: {
-            userId: req.user!.id,
-            bookId: id,
-          },
-        },
-        create: {
-          userId: req.user!.id,
-          bookId: id,
-          rating: parseInt(rating),
-          comment,
-        },
-        update: {
-          rating: parseInt(rating),
-          comment,
-        },
-        include: {
-          user: { select: { id: true, name: true, imageUrl: true } },
-        },
-      });
-      res.json(bookRating);
-      console.log('[POST] /books/:id/rate response', {
-        status: 200,
-        bookId: id,
-      });
-    } catch (error) {
-      console.error('Rate book error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-      console.log('[POST] /books/:id/rate response', { status: 500, error });
-    }
-  }
-);
-
-// Update a chapter
-router.put(
-  '/chapters/:id',
-  authenticateToken,
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { title, content } = req.body;
-      const chapter = await prisma.chapter.findUnique({ where: { id } });
-      if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
-      // Optionally, check if user is admin or owner of the book
-      const book = await prisma.book.findUnique({
-        where: { id: chapter.bookId },
-      });
-      const user = await prisma.user.findUnique({
-        where: { id: req.user!.id },
-      });
-      if (!user || (book?.userId !== req.user!.id && user.role !== 'ADMIN')) {
-        return res
-          .status(403)
-          .json({ error: 'Not authorized to edit this chapter' });
-      }
-      const updatedChapter = await prisma.chapter.update({
-        where: { id },
-        data: { title, content },
-      });
-      res.json(updatedChapter);
-      console.log('[PUT] /chapters/:id response', {
-        status: 200,
-        chapterId: updatedChapter?.id,
-      });
-    } catch (error) {
-      console.error('Update chapter error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-      console.log('[PUT] /chapters/:id response', { status: 500, error });
-    }
-  }
-);
-
-// Create a new chapter
-router.post(
-  '/:bookId/chapters',
+  '/:bookId/paragraphs',
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
       const { bookId } = req.params;
-      const { title, content, order } = req.body;
+      const { content, order, chapterNumber, readingTimeEst } = req.body;
+
       const book = await prisma.book.findUnique({ where: { id: bookId } });
       if (!book) return res.status(404).json({ error: 'Book not found' });
+
       const user = await prisma.user.findUnique({
         where: { id: req.user!.id },
       });
       if (!user || (book.userId !== req.user!.id && user.role !== 'ADMIN')) {
         return res
           .status(403)
-          .json({ error: 'Not authorized to add chapter to this book' });
+          .json({ error: 'Not authorized to add paragraph to this book' });
       }
-      const chapter = await prisma.chapter.create({
+
+      const paragraph = await prisma.paragraph.create({
         data: {
           bookId,
-          title,
           content,
           order,
+          chapterNumber,
+          readingTimeEst,
+          createdBy: req.user!.id,
         },
       });
-      res.status(201).json(chapter);
-      console.log('[POST] /books/:bookId/chapters response', {
+
+      res.status(201).json(paragraph);
+      console.log('[POST] /books/:bookId/paragraphs response', {
         status: 201,
-        chapterId: chapter?.id,
+        paragraphId: paragraph?.id,
       });
     } catch (error) {
-      console.error('Create chapter error:', error);
+      console.error('Create paragraph error:', error);
       res.status(500).json({ error: 'Internal server error' });
-      console.log('[POST] /books/:bookId/chapters response', {
+      console.log('[POST] /books/:bookId/paragraphs response', {
         status: 500,
         error,
       });
     }
   }
 );
+
+// Update a paragraph
+router.put(
+  '/paragraphs/:id',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { content, order, chapterNumber, readingTimeEst } = req.body;
+
+      const paragraph = await prisma.paragraph.findFirst({
+        where: { id, deletedAt: null },
+        include: { book: true },
+      });
+      if (!paragraph)
+        return res.status(404).json({ error: 'Paragraph not found' });
+
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+      });
+      if (
+        !user ||
+        (paragraph.book.userId !== req.user!.id && user.role !== 'ADMIN')
+      ) {
+        return res
+          .status(403)
+          .json({ error: 'Not authorized to edit this paragraph' });
+      }
+
+      const updatedParagraph = await prisma.paragraph.update({
+        where: { id },
+        data: {
+          content,
+          order,
+          chapterNumber,
+          readingTimeEst,
+          updatedBy: req.user!.id,
+        },
+      });
+
+      res.json(updatedParagraph);
+      console.log('[PUT] /paragraphs/:id response', {
+        status: 200,
+        paragraphId: updatedParagraph?.id,
+      });
+    } catch (error) {
+      console.error('Update paragraph error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+      console.log('[PUT] /paragraphs/:id response', { status: 500, error });
+    }
+  }
+);
+
+// Get book structure (chapters and paragraph counts)
+router.get('/:id/structure', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const book = await prisma.book.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, title: true, isPublic: true, userId: true },
+    });
+
+    if (!book) return res.status(404).json({ error: 'Book not found' });
+
+    // Get chapter structure
+    const chapters = await prisma.paragraph.groupBy({
+      by: ['chapterNumber'],
+      where: {
+        bookId: id,
+        deletedAt: null,
+        chapterNumber: { not: null },
+      },
+      _count: { id: true },
+      _sum: { readingTimeEst: true },
+      orderBy: { chapterNumber: 'asc' },
+    });
+
+    const structure = chapters.map((chapter) => ({
+      chapterNumber: chapter.chapterNumber,
+      paragraphCount: chapter._count.id,
+      totalReadingTime: chapter._sum.readingTimeEst || 0,
+    }));
+
+    // Get total statistics
+    const totalStats = await prisma.paragraph.aggregate({
+      where: { bookId: id, deletedAt: null },
+      _count: { id: true },
+      _sum: { readingTimeEst: true },
+    });
+
+    res.json({
+      bookId: id,
+      chapters: structure,
+      totalParagraphs: totalStats._count.id,
+      totalReadingTime: totalStats._sum.readingTimeEst || 0,
+    });
+  } catch (error) {
+    console.error('Get book structure error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 export default router;

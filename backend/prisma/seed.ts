@@ -151,27 +151,102 @@ async function main() {
 
   console.log('✅ Author links created');
 
-  // Create tags
-  const tags = await prisma.tag.createMany({
+  // Create tags (both system and user tags)
+  const systemTags = await prisma.tag.createMany({
     data: [
-      { name: 'Classic', description: 'Classic literature' },
+      {
+        name: 'Classic',
+        description: 'Classic literature',
+        isSystem: true,
+        isPublic: true,
+      },
       {
         name: 'American Literature',
         description: 'Literature from American authors',
+        isSystem: true,
+        isPublic: true,
       },
-      { name: 'Drama', description: 'Dramatic works' },
-      { name: 'Coming of Age', description: 'Stories about growing up' },
-      { name: 'Dystopian', description: 'Dystopian fiction' },
-      { name: 'Political', description: 'Political themes' },
-      { name: 'Philosophical', description: 'Philosophical themes' },
-      { name: 'Romance', description: 'Romantic themes and relationships' },
+      {
+        name: 'Drama',
+        description: 'Dramatic works',
+        isSystem: true,
+        isPublic: true,
+      },
+      {
+        name: 'Coming of Age',
+        description: 'Stories about growing up',
+        isSystem: true,
+        isPublic: true,
+      },
+      {
+        name: 'Dystopian',
+        description: 'Dystopian fiction',
+        isSystem: true,
+        isPublic: true,
+      },
+      {
+        name: 'Political',
+        description: 'Political themes',
+        isSystem: true,
+        isPublic: true,
+      },
+      {
+        name: 'Philosophical',
+        description: 'Philosophical themes',
+        isSystem: true,
+        isPublic: true,
+      },
+      {
+        name: 'Romance',
+        description: 'Romantic themes and relationships',
+        isSystem: true,
+        isPublic: true,
+      },
       {
         name: 'British Literature',
         description: 'Literature from British authors',
+        isSystem: true,
+        isPublic: true,
       },
       {
         name: 'Social Commentary',
         description: 'Works that comment on society',
+        isSystem: true,
+        isPublic: true,
+      },
+    ],
+  });
+
+  // Create user tags
+  await prisma.tag.createMany({
+    data: [
+      {
+        name: 'My Favorites',
+        description: 'Personal favorite books',
+        isSystem: false,
+        isPublic: false,
+        createdBy: user1.id,
+      },
+      {
+        name: 'Book Club Picks',
+        description: 'Books selected for book club',
+        isSystem: false,
+        isPublic: true,
+        createdBy: user1.id,
+      },
+      {
+        name: 'Must Read',
+        description: 'Essential reading list',
+        isSystem: false,
+        isPublic: true,
+        createdBy: user2.id,
+      },
+      {
+        name: 'Quick Reads',
+        description: 'Books that can be read quickly',
+        isSystem: false,
+        isPublic: false,
+        createdBy: user2.id,
       },
     ],
   });
@@ -271,6 +346,7 @@ async function main() {
       slug: 'the-great-gatsby',
       genre: 'Classic Fiction',
       isPublic: true,
+      isDraft: false,
       orderInCollection: 1,
       createdBy: user1.id,
     },
@@ -295,6 +371,7 @@ async function main() {
       slug: 'to-kill-a-mockingbird',
       genre: 'Literary Fiction',
       isPublic: true,
+      isDraft: false,
       orderInCollection: 2,
       createdBy: user2.id,
     },
@@ -319,6 +396,7 @@ async function main() {
       slug: '1984',
       genre: 'Dystopian Fiction',
       isPublic: false,
+      isDraft: false,
       orderInCollection: 1,
       createdBy: user1.id,
     },
@@ -343,6 +421,7 @@ async function main() {
       slug: 'pride-and-prejudice',
       genre: 'Romance',
       isPublic: true,
+      isDraft: false,
       orderInCollection: 3,
       createdBy: adminUser.id,
     },
@@ -368,6 +447,7 @@ async function main() {
       slug: 'gatsby-le-magnifique',
       genre: 'Fiction Classique',
       isPublic: true,
+      isDraft: false,
       orderInCollection: 4,
       createdBy: user2.id,
     },
@@ -388,79 +468,129 @@ async function main() {
 
   console.log('✅ Book-author relationships created');
 
-  // Create chapters with content and reading time estimates
-  const chapter1 = await prisma.chapter.create({
+  // Create paragraphs with content and reading time estimates
+  const paragraph1 = await prisma.paragraph.create({
     data: {
       bookId: book1.id,
-      title: 'Chapter 1',
-      content: `In my younger and more vulnerable years my father gave me some advice that I've carried with me ever since.
-
-"Whenever you feel like criticizing any one," he told me, "just remember that all the people in this world haven't had the advantages that you've had."
-
-He didn't say any more, but we've always been unusually communicative in a reserved way, and I understood that he meant a great deal more than that.
-
-In consequence, I'm inclined to reserve all judgments, a habit that has opened up many curious natures to me and also made me the victim of not a few veteran bores.`,
+      content: `In my younger and more vulnerable years my father gave me some advice that I've carried with me ever since.`,
       order: 1,
-      readingTimeEst: 15,
+      chapterNumber: 1,
+      readingTimeEst: 2,
       createdBy: user1.id,
     },
   });
 
-  const chapter2 = await prisma.chapter.create({
+  const paragraph2 = await prisma.paragraph.create({
     data: {
       bookId: book1.id,
-      title: 'Chapter 2',
-      content: `About half way between West Egg and New York the motor road hastily joins the railroad and runs beside it for a quarter of a mile, so as to shrink away from a certain desolate area of land.
-
-This is a valley of ashes—a fantastic farm where ashes grow like wheat into ridges and hills and grotesque gardens; where ashes take the forms of houses and chimneys and rising smoke and, finally, with a transcendent effort, of men who move dimly and already crumbling through the powdery air.`,
+      content: `"Whenever you feel like criticizing any one," he told me, "just remember that all the people in this world haven't had the advantages that you've had."`,
       order: 2,
-      readingTimeEst: 20,
+      chapterNumber: 1,
+      readingTimeEst: 2,
       createdBy: user1.id,
     },
   });
 
-  const chapter3 = await prisma.chapter.create({
+  const paragraph3 = await prisma.paragraph.create({
+    data: {
+      bookId: book1.id,
+      content: `He didn't say any more, but we've always been unusually communicative in a reserved way, and I understood that he meant a great deal more than that.`,
+      order: 3,
+      chapterNumber: 1,
+      readingTimeEst: 2,
+      createdBy: user1.id,
+    },
+  });
+
+  const paragraph4 = await prisma.paragraph.create({
+    data: {
+      bookId: book1.id,
+      content: `About half way between West Egg and New York the motor road hastily joins the railroad and runs beside it for a quarter of a mile, so as to shrink away from a certain desolate area of land.`,
+      order: 4,
+      chapterNumber: 2,
+      readingTimeEst: 3,
+      createdBy: user1.id,
+    },
+  });
+
+  const paragraph5 = await prisma.paragraph.create({
+    data: {
+      bookId: book1.id,
+      content: `This is a valley of ashes—a fantastic farm where ashes grow like wheat into ridges and hills and grotesque gardens; where ashes take the forms of houses and chimneys and rising smoke and, finally, with a transcendent effort, of men who move dimly and already crumbling through the powdery air.`,
+      order: 5,
+      chapterNumber: 2,
+      readingTimeEst: 4,
+      createdBy: user1.id,
+    },
+  });
+
+  const paragraph6 = await prisma.paragraph.create({
     data: {
       bookId: book2.id,
-      title: 'Chapter 1',
-      content: `When I was almost thirteen years old my brother Jem got his arm badly broken at the elbow.
-
-When it healed, and Jem's fears of never being able to play football were assuaged, he was seldom self-conscious about his injury.
-
-His left arm was somewhat shorter than his right; when he stood or walked, the back of his hand was at right angles to his body, his thumb parallel to his thigh.`,
+      content: `When I was almost thirteen years old my brother Jem got his arm badly broken at the elbow.`,
       order: 1,
-      readingTimeEst: 12,
+      chapterNumber: 1,
+      readingTimeEst: 2,
       createdBy: user2.id,
     },
   });
 
-  const chapter4 = await prisma.chapter.create({
+  const paragraph7 = await prisma.paragraph.create({
+    data: {
+      bookId: book2.id,
+      content: `When it healed, and Jem's fears of never being able to play football were assuaged, he was seldom self-conscious about his injury.`,
+      order: 2,
+      chapterNumber: 1,
+      readingTimeEst: 2,
+      createdBy: user2.id,
+    },
+  });
+
+  const paragraph8 = await prisma.paragraph.create({
     data: {
       bookId: book3.id,
-      title: 'Part One, Chapter 1',
-      content: `It was a bright cold day in April, and the clocks were striking thirteen.
-
-Winston Smith, his chin nuzzled into his breast in an effort to escape the vile wind, slipped quickly through the glass doors of Victory Mansions, though not quickly enough to prevent a swirl of gritty dust from entering along with him.`,
+      content: `It was a bright cold day in April, and the clocks were striking thirteen.`,
       order: 1,
-      readingTimeEst: 18,
+      chapterNumber: 1,
+      readingTimeEst: 1,
       createdBy: user1.id,
     },
   });
 
-  const chapter5 = await prisma.chapter.create({
+  const paragraph9 = await prisma.paragraph.create({
+    data: {
+      bookId: book3.id,
+      content: `Winston Smith, his chin nuzzled into his breast in an effort to escape the vile wind, slipped quickly through the glass doors of Victory Mansions, though not quickly enough to prevent a swirl of gritty dust from entering along with him.`,
+      order: 2,
+      chapterNumber: 1,
+      readingTimeEst: 3,
+      createdBy: user1.id,
+    },
+  });
+
+  const paragraph10 = await prisma.paragraph.create({
     data: {
       bookId: book4.id,
-      title: 'Chapter 1',
-      content: `It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.
-
-However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters.`,
+      content: `It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.`,
       order: 1,
-      readingTimeEst: 25,
+      chapterNumber: 1,
+      readingTimeEst: 2,
       createdBy: adminUser.id,
     },
   });
 
-  console.log('✅ Chapters created');
+  const paragraph11 = await prisma.paragraph.create({
+    data: {
+      bookId: book4.id,
+      content: `However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters.`,
+      order: 2,
+      chapterNumber: 1,
+      readingTimeEst: 3,
+      createdBy: adminUser.id,
+    },
+  });
+
+  console.log('✅ Paragraphs created');
 
   // Create book tags
   if (
@@ -521,47 +651,53 @@ However little known the feelings or views of such a man may be on his first ent
     data: [
       {
         userId: user1.id,
-        chapterId: chapter1.id,
-        position: 150,
+        paragraphId: paragraph1.id,
+        position: 50,
+        percentage: 0.8,
       },
       {
         userId: user1.id,
-        chapterId: chapter4.id,
-        position: 75,
+        paragraphId: paragraph8.id,
+        position: 25,
+        percentage: 0.4,
       },
       {
         userId: user2.id,
-        chapterId: chapter3.id,
-        position: 200,
+        paragraphId: paragraph6.id,
+        position: 80,
+        percentage: 1.0,
       },
       {
         userId: user2.id,
-        chapterId: chapter5.id,
-        position: 50,
+        paragraphId: paragraph10.id,
+        position: 30,
+        percentage: 0.3,
       },
       {
         userId: adminUser.id,
-        chapterId: chapter2.id,
-        position: 300,
+        paragraphId: paragraph4.id,
+        position: 100,
+        percentage: 0.9,
       },
     ],
   });
 
   console.log('✅ Progress records created');
 
-  // Create notes
+  // Create notes with enhanced structure
   const note1 = await prisma.note.create({
     data: {
       userId: user1.id,
       bookId: book1.id,
-      chapterId: chapter1.id,
+      paragraphId: paragraph1.id,
       startIndex: 0,
       endIndex: 50,
-      text: 'In my younger and more vulnerable years',
-      firstContent:
-        'This opening line sets the reflective tone of the entire novel.',
-      secondContent: 'Nick Carraway establishes himself as narrator.',
-      thirdContent: 'The theme of judgment and moral relativism begins here.',
+      selectedText: 'In my younger and more vulnerable years',
+      text: 'This opening line sets the reflective tone of the entire novel.',
+      firstContent: 'Nick Carraway establishes himself as narrator.',
+      secondContent: 'The theme of judgment and moral relativism begins here.',
+      thirdContent: 'Literary device: first-person retrospective narration.',
+      noteType: 'highlight',
       isPublic: true,
       createdBy: user1.id,
     },
@@ -571,13 +707,15 @@ However little known the feelings or views of such a man may be on his first ent
     data: {
       userId: user2.id,
       bookId: book2.id,
-      chapterId: chapter3.id,
+      paragraphId: paragraph6.id,
       startIndex: 0,
       endIndex: 30,
-      text: 'When I was almost thirteen',
-      firstContent: 'The story begins with Scout as an adult looking back.',
-      secondContent: 'This establishes the retrospective narrative style.',
-      thirdContent: 'Shows the maturation theme from the start.',
+      selectedText: 'When I was almost thirteen',
+      text: 'The story begins with Scout as an adult looking back.',
+      firstContent: 'This establishes the retrospective narrative style.',
+      secondContent: 'Shows the maturation theme from the start.',
+      thirdContent: 'Harper Lee uses this device throughout the novel.',
+      noteType: 'comment',
       isPublic: false,
       createdBy: user2.id,
     },
@@ -587,16 +725,37 @@ However little known the feelings or views of such a man may be on his first ent
     data: {
       userId: adminUser.id,
       bookId: book4.id,
-      chapterId: chapter5.id,
+      paragraphId: paragraph10.id,
       startIndex: 0,
       endIndex: 60,
-      text: 'It is a truth universally acknowledged',
-      firstContent: 'One of the most famous opening lines in literature.',
-      secondContent:
+      selectedText: 'It is a truth universally acknowledged',
+      text: 'One of the most famous opening lines in literature.',
+      firstContent:
         'Establishes the satirical tone about marriage and society.',
-      thirdContent: 'Irony is immediately apparent in this statement.',
+      secondContent: 'Irony is immediately apparent in this statement.',
+      thirdContent: 'Sets up the entire social critique of the novel.',
+      noteType: 'definition',
       isPublic: true,
       createdBy: adminUser.id,
+    },
+  });
+
+  // Create a whole paragraph note (no text selection)
+  const note4 = await prisma.note.create({
+    data: {
+      userId: user1.id,
+      bookId: book3.id,
+      paragraphId: paragraph8.id,
+      startIndex: null,
+      endIndex: null,
+      selectedText: null,
+      text: 'This paragraph perfectly captures the dystopian atmosphere.',
+      firstContent: 'The striking thirteen creates immediate unease.',
+      secondContent: 'Orwell establishes the unsettling tone from the start.',
+      thirdContent: 'Shows how language itself is corrupted in this world.',
+      noteType: 'paragraph_note',
+      isPublic: true,
+      createdBy: user1.id,
     },
   });
 
@@ -632,25 +791,31 @@ However little known the feelings or views of such a man may be on his first ent
     ],
   });
 
-  await prisma.chapterRating.createMany({
+  await prisma.paragraphRating.createMany({
     data: [
       {
         userId: user1.id,
-        chapterId: chapter1.id,
+        paragraphId: paragraph1.id,
         rating: 4,
         comment: 'Great opening that sets the tone perfectly.',
       },
       {
         userId: user2.id,
-        chapterId: chapter3.id,
+        paragraphId: paragraph6.id,
         rating: 5,
         comment: 'Love how the story begins.',
       },
       {
         userId: adminUser.id,
-        chapterId: chapter5.id,
+        paragraphId: paragraph10.id,
         rating: 5,
         comment: 'Iconic opening line!',
+      },
+      {
+        userId: user1.id,
+        paragraphId: paragraph8.id,
+        rating: 5,
+        comment: 'Perfectly captures the dystopian atmosphere.',
       },
     ],
   });
@@ -711,10 +876,101 @@ However little known the feelings or views of such a man may be on his first ent
         noteId: note3.id,
         userId: user1.id,
       },
+      {
+        noteId: note4.id,
+        userId: user2.id,
+      },
     ],
   });
 
   console.log('✅ Sharing relationships created');
+
+  // Create sample reports (admin will review these)
+  const report1 = await prisma.report.create({
+    data: {
+      userId: user2.id,
+      reportType: 'SPELLING_ERROR',
+      description:
+        'There seems to be a typo in this paragraph - "beleive" should be "believe"',
+      paragraphId: paragraph5.id,
+      status: 'PENDING',
+    },
+  });
+
+  const report2 = await prisma.report.create({
+    data: {
+      userId: user1.id,
+      reportType: 'INAPPROPRIATE_CONTENT',
+      description:
+        'This note contains inappropriate language that should be reviewed',
+      noteId: note2.id,
+      status: 'UNDER_REVIEW',
+    },
+  });
+
+  const report3 = await prisma.report.create({
+    data: {
+      userId: user2.id,
+      reportType: 'INCORRECT_INFORMATION',
+      description:
+        'The publication year listed seems incorrect based on my research',
+      bookId: book3.id,
+      status: 'PENDING',
+    },
+  });
+
+  const report4 = await prisma.report.create({
+    data: {
+      userId: user1.id,
+      reportType: 'DUPLICATE_CONTENT',
+      description: 'This author appears to be a duplicate of another entry',
+      authorId: author2.id,
+      status: 'RESOLVED',
+      resolvedAt: new Date(),
+      resolvedBy: adminUser.id,
+      adminNotes:
+        'Checked - this is not a duplicate, different author with similar name.',
+    },
+  });
+
+  // Create some rating reports
+  const bookRating1 = await prisma.bookRating.findFirst({
+    where: { userId: user1.id, bookId: book2.id },
+  });
+
+  const paragraphRating1 = await prisma.paragraphRating.findFirst({
+    where: { userId: user1.id, paragraphId: paragraph1.id },
+  });
+
+  if (bookRating1) {
+    await prisma.report.create({
+      data: {
+        userId: user2.id,
+        reportType: 'OTHER',
+        description: 'This rating seems fake - user has never read this book',
+        bookRatingId: bookRating1.id,
+        status: 'PENDING',
+      },
+    });
+  }
+
+  if (paragraphRating1) {
+    await prisma.report.create({
+      data: {
+        userId: adminUser.id,
+        reportType: 'INAPPROPRIATE_CONTENT',
+        description: 'Rating comment contains inappropriate language',
+        paragraphRatingId: paragraphRating1.id,
+        status: 'DISMISSED',
+        resolvedAt: new Date(),
+        resolvedBy: adminUser.id,
+        adminNotes:
+          'Reviewed - comment is acceptable within community guidelines.',
+      },
+    });
+  }
+
+  console.log('✅ Sample reports created');
 
   console.log('🎉 Database seeded successfully!');
   console.log('\n📋 Sample accounts:');
@@ -728,16 +984,19 @@ However little known the feelings or views of such a man may be on his first ent
   console.log('  • 4 authors with bios and external links');
   console.log('  • 5 publishers with company information');
   console.log('  • 2 collections (public and private)');
-  console.log('  • 5 chapters with content and reading time estimates');
-  console.log('  • 10 comprehensive tags with descriptions');
-  console.log('  • Book, chapter, and author ratings');
-  console.log('  • Notes with multi-level content');
-  console.log('  • Progress tracking across multiple books');
+  console.log('  • 11 paragraphs with content and reading time estimates');
+  console.log('  • 14 comprehensive tags (system and user tags)');
+  console.log('  • Book, paragraph, and author ratings');
+  console.log('  • 4 notes with multi-level content and different types');
+  console.log('  • Progress tracking across multiple paragraphs');
   console.log('  • Sharing relationships between users');
+  console.log('  • 6 sample reports demonstrating the reporting system');
   console.log(
     '  • Multi-edition support (The Great Gatsby in English and French)'
   );
   console.log('  • Publisher relationships for complete bibliographic data');
+  console.log('  • Enhanced tagging system with system and user-created tags');
+  console.log('  • Comprehensive reporting system for content moderation');
 }
 
 main()

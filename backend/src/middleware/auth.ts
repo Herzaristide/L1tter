@@ -33,7 +33,7 @@ export const authenticateToken = async (
       const tokenData = decoded as { id: string; email: string };
       const user = await prisma.user.findUnique({
         where: { id: tokenData.id },
-        select: { id: true, email: true, role: true }
+        select: { id: true, email: true, role: true },
       });
 
       if (!user) {
@@ -62,4 +62,42 @@ export const requireAdmin = (
   }
 
   next();
+};
+
+export const optionalAuth = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    // No token provided, continue without authentication
+    return next();
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET!, async (err, decoded) => {
+    if (err) {
+      // Invalid token, continue without authentication
+      return next();
+    }
+
+    try {
+      const tokenData = decoded as { id: string; email: string };
+      const user = await prisma.user.findUnique({
+        where: { id: tokenData.id },
+        select: { id: true, email: true, role: true },
+      });
+
+      if (user) {
+        req.user = { id: user.id, email: user.email, role: user.role };
+      }
+
+      next();
+    } catch (error) {
+      // Error occurred, continue without authentication
+      next();
+    }
+  });
 };

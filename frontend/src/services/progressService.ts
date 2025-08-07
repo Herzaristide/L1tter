@@ -14,18 +14,21 @@ export const progressService = {
     return response.data;
   },
 
-  // Update progress for a chapter
-  updateProgress: async (chapterId: string, position: number): Promise<any> => {
+  // Update progress for a paragraph
+  updateProgress: async (
+    paragraphId: string,
+    position: number
+  ): Promise<any> => {
     const response = await api.post('/progress', {
-      chapterId,
+      paragraphId,
       position,
     });
     return response.data;
   },
 
-  // Mark chapter as completed
-  completeChapter: async (chapterId: string): Promise<any> => {
-    const response = await api.post(`/progress/complete/${chapterId}`);
+  // Mark paragraph as completed
+  completeParagraph: async (paragraphId: string): Promise<any> => {
+    const response = await api.post(`/progress/complete/${paragraphId}`);
     return response.data;
   },
 
@@ -35,8 +38,8 @@ export const progressService = {
     return response.data;
   },
 
-  // Delete progress for a chapter
-  deleteProgress: async (chapterId: string): Promise<void> => {
-    await api.delete(`/progress/${chapterId}`);
+  // Delete progress for a paragraph
+  deleteProgress: async (paragraphId: string): Promise<void> => {
+    await api.delete(`/progress/${paragraphId}`);
   },
 };

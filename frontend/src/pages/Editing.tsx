@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { bookService } from '../services/bookService';
+import { paragraphsService } from '../services/paragraphsService';
 
 const Editing: React.FC = () => {
   // Debounce timer for auto-save
@@ -8,97 +9,112 @@ const Editing: React.FC = () => {
     [key: string]: NodeJS.Timeout;
   }>({});
 
-  // Auto-save chapter when content changes (debounced)
-  const handleAutoSave = (chapterId: string, field: string, value: string) => {
-    setEditedChapters((prev) =>
-      prev.map((ch) => (ch.id === chapterId ? { ...ch, [field]: value } : ch))
+  // Auto-save paragraph when content changes (debounced)
+  const handleAutoSave = (
+    paragraphId: string,
+    field: string,
+    value: string
+  ) => {
+    setEditedParagraphs((prev) =>
+      prev.map((p) => (p.id === paragraphId ? { ...p, [field]: value } : p))
     );
     // Clear previous timer
-    if (debounceTimers[chapterId]) {
-      clearTimeout(debounceTimers[chapterId]);
+    if (debounceTimers[paragraphId]) {
+      clearTimeout(debounceTimers[paragraphId]);
     }
     // Set new timer
     const timer = setTimeout(async () => {
-      setSaving((prev) => ({ ...prev, [chapterId]: true }));
-      const chapter = editedChapters.find((ch) => ch.id === chapterId);
+      setSaving((prev) => ({ ...prev, [paragraphId]: true }));
+      const paragraph = editedParagraphs.find((p) => p.id === paragraphId);
       try {
-        await bookService.updateChapter(chapterId, {
-          title: chapter.title,
-          content: field === 'content' ? value : chapter.content,
+        await paragraphsService.updateParagraph(paragraphId, {
+          content: field === 'content' ? value : paragraph.content,
+          order: paragraph.order,
+          chapterNumber: paragraph.chapterNumber,
+          readingTimeEst: paragraph.readingTimeEst,
         });
       } catch (err) {
         // Optionally show error
       } finally {
-        setSaving((prev) => ({ ...prev, [chapterId]: false }));
+        setSaving((prev) => ({ ...prev, [paragraphId]: false }));
       }
     }, 800); // 800ms debounce
-    setDebounceTimers((prev) => ({ ...prev, [chapterId]: timer }));
+    setDebounceTimers((prev) => ({ ...prev, [paragraphId]: timer }));
   };
-  const [editedChapters, setEditedChapters] = useState<any[]>([]);
+
+  const [editedParagraphs, setEditedParagraphs] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState<{ [key: string]: boolean }>({});
   const [saving, setSaving] = useState<{ [key: string]: boolean }>({});
   const [adding, setAdding] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newOrder, setNewOrder] = useState<number | ''>('');
+  const [newChapterNumber, setNewChapterNumber] = useState<number | ''>('');
+  const [newReadingTime, setNewReadingTime] = useState<number | ''>('');
   const [addError, setAddError] = useState<string | null>(null);
 
-  const handleEditClick = (chapterId: string) => {
-    setIsEditing((prev) => ({ ...prev, [chapterId]: true }));
+  const handleEditClick = (paragraphId: string) => {
+    setIsEditing((prev) => ({ ...prev, [paragraphId]: true }));
   };
 
-  const handleCancel = (chapterId: string) => {
-    // Reset to original chapter data
-    const original = book.chapters.find((ch: any) => ch.id === chapterId);
-    setEditedChapters((prev) =>
-      prev.map((ch) => (ch.id === chapterId ? { ...original } : ch))
+  const handleCancel = (paragraphId: string) => {
+    // Reset to original paragraph data
+    const original = paragraphs.find((p: any) => p.id === paragraphId);
+    setEditedParagraphs((prev) =>
+      prev.map((p) => (p.id === paragraphId ? { ...original } : p))
     );
-    setIsEditing((prev) => ({ ...prev, [chapterId]: false }));
+    setIsEditing((prev) => ({ ...prev, [paragraphId]: false }));
   };
 
-  const handleChange = (chapterId: string, field: string, value: string) => {
-    setEditedChapters((prev) =>
-      prev.map((ch) => (ch.id === chapterId ? { ...ch, [field]: value } : ch))
+  const handleChange = (paragraphId: string, field: string, value: string) => {
+    setEditedParagraphs((prev) =>
+      prev.map((p) => (p.id === paragraphId ? { ...p, [field]: value } : p))
     );
   };
 
-  const handleSave = async (chapterId: string) => {
-    setSaving((prev) => ({ ...prev, [chapterId]: true }));
-    const chapter = editedChapters.find((ch) => ch.id === chapterId);
+  const handleSave = async (paragraphId: string) => {
+    setSaving((prev) => ({ ...prev, [paragraphId]: true }));
+    const paragraph = editedParagraphs.find((p) => p.id === paragraphId);
     try {
-      await bookService.updateChapter(chapterId, {
-        title: chapter.title,
-        content: chapter.content,
+      await paragraphsService.updateParagraph(paragraphId, {
+        content: paragraph.content,
+        order: paragraph.order,
+        chapterNumber: paragraph.chapterNumber,
+        readingTimeEst: paragraph.readingTimeEst,
       });
-      setIsEditing((prev) => ({ ...prev, [chapterId]: false }));
+      setIsEditing((prev) => ({ ...prev, [paragraphId]: false }));
     } catch (err) {
-      alert('Failed to save chapter');
+      alert('Failed to save paragraph');
     } finally {
-      setSaving((prev) => ({ ...prev, [chapterId]: false }));
+      setSaving((prev) => ({ ...prev, [paragraphId]: false }));
     }
   };
 
-  const handleAddChapter = async (e: React.FormEvent) => {
+  const handleAddParagraph = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddError(null);
-    if (!newTitle || !newContent) {
-      setAddError('Title and content are required');
+    if (!newContent) {
+      setAddError('Content is required');
       return;
     }
     setAdding(true);
     try {
-      const newChapter = {
-        title: newTitle,
+      const newParagraph = {
+        bookId: bookId!,
         content: newContent,
         order: newOrder ? Number(newOrder) : undefined,
+        chapterNumber: newChapterNumber ? Number(newChapterNumber) : undefined,
+        readingTimeEst: newReadingTime ? Number(newReadingTime) : undefined,
       };
-      const chapter = await bookService.createChapter(bookId!, newChapter);
-      setEditedChapters((prev) => [...prev, chapter]);
-      setNewTitle('');
+      const paragraph = await paragraphsService.createParagraph(newParagraph);
+      setEditedParagraphs((prev) => [...prev, paragraph]);
       setNewContent('');
       setNewOrder('');
+      setNewChapterNumber('');
+      setNewReadingTime('');
+      // Refresh paragraphs
+      await fetchParagraphs();
     } catch (err) {
-      setAddError('Failed to add chapter');
+      setAddError('Failed to add paragraph');
     } finally {
       setAdding(false);
     }
@@ -106,7 +122,21 @@ const Editing: React.FC = () => {
 
   const { bookId } = useParams<{ bookId: string }>();
   const [book, setBook] = useState<any | null>(null);
+  const [paragraphs, setParagraphs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const fetchParagraphs = async () => {
+    if (!bookId) return;
+    try {
+      const data = await paragraphsService.getParagraphs(bookId);
+      setParagraphs(data.paragraphs || []);
+      setEditedParagraphs(data.paragraphs?.map((p: any) => ({ ...p })) || []);
+    } catch (err) {
+      console.error('Failed to fetch paragraphs:', err);
+      setParagraphs([]);
+      setEditedParagraphs([]);
+    }
+  };
 
   useEffect(() => {
     const fetchBook = async () => {
@@ -114,6 +144,7 @@ const Editing: React.FC = () => {
       try {
         const data = await bookService.getBook(bookId!);
         setBook(data);
+        await fetchParagraphs();
       } catch (err) {
         setBook(null);
       } finally {
@@ -122,12 +153,6 @@ const Editing: React.FC = () => {
     };
     if (bookId) fetchBook();
   }, [bookId]);
-
-  useEffect(() => {
-    if (book && book.chapters) {
-      setEditedChapters(book.chapters.map((ch: any) => ({ ...ch })));
-    }
-  }, [book]);
 
   if (loading) {
     return (
@@ -217,7 +242,6 @@ const Editing: React.FC = () => {
               <strong>Deleted At:</strong>{' '}
               {book.deletedAt ? book.deletedAt : 'N/A'}
             </div>
-            {/* Add more metadata fields as needed */}
           </div>
         </div>
       </div>
@@ -235,119 +259,162 @@ const Editing: React.FC = () => {
           <div className='text-gray-500 mb-6'>No tags found.</div>
         )}
 
-        <h2 className='text-xl font-semibold mb-4'>Chapters</h2>
-        {editedChapters && editedChapters.length > 0 ? (
+        <h2 className='text-xl font-semibold mb-4'>Paragraphs</h2>
+        {editedParagraphs && editedParagraphs.length > 0 ? (
           <>
-            {editedChapters.map((chapter: any) => (
-              <section key={chapter.id} className='scroll-mt-24 mb-8'>
-                <input
-                  className='block w-full mb-2 px-3 py-2 border rounded text-lg font-semibold'
-                  value={chapter.title}
-                  onChange={(e) =>
-                    handleAutoSave(chapter.id, 'title', e.target.value)
-                  }
-                  disabled={saving[chapter.id]}
-                />
+            {editedParagraphs.map((paragraph: any) => (
+              <section key={paragraph.id} className='scroll-mt-24 mb-8'>
+                <div className='mb-2 text-sm text-gray-500'>
+                  <span>Order: {paragraph.order}</span>
+                  {paragraph.chapterNumber && (
+                    <span className='ml-4'>
+                      Chapter: {paragraph.chapterNumber}
+                    </span>
+                  )}
+                  {paragraph.readingTimeEst && (
+                    <span className='ml-4'>
+                      Reading Time: {paragraph.readingTimeEst}s
+                    </span>
+                  )}
+                </div>
                 <textarea
                   className='block w-full mb-2 px-3 py-2 border rounded prose-lg max-w-none text-gray-900 dark:text-gray-100 whitespace-pre-line'
-                  value={chapter.content}
+                  value={paragraph.content}
                   rows={8}
                   onChange={(e) =>
-                    handleAutoSave(chapter.id, 'content', e.target.value)
+                    handleAutoSave(paragraph.id, 'content', e.target.value)
                   }
-                  disabled={saving[chapter.id]}
+                  disabled={saving[paragraph.id]}
                 />
-                {saving[chapter.id] && (
+                {saving[paragraph.id] && (
                   <div className='text-primary-500 text-sm'>Saving...</div>
                 )}
               </section>
             ))}
-            {/* Add new chapter form after last chapter */}
+            {/* Add new paragraph form after last paragraph */}
             <form
-              onSubmit={handleAddChapter}
+              onSubmit={handleAddParagraph}
               className='mb-8 p-4 border rounded bg-gray-50 dark:bg-gray-900'
             >
-              <h3 className='text-lg font-semibold mb-2'>Add New Chapter</h3>
+              <h3 className='text-lg font-semibold mb-2'>Add New Paragraph</h3>
               {addError && <div className='text-red-500 mb-2'>{addError}</div>}
-              <input
-                className='block w-full mb-2 px-3 py-2 border rounded'
-                placeholder='Chapter title'
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                disabled={adding}
-              />
               <textarea
                 className='block w-full mb-2 px-3 py-2 border rounded'
-                placeholder='Chapter content'
+                placeholder='Paragraph content'
                 value={newContent}
                 rows={6}
                 onChange={(e) => setNewContent(e.target.value)}
                 disabled={adding}
               />
-              <input
-                className='block w-32 mb-2 px-3 py-2 border rounded'
-                type='number'
-                placeholder='Order (optional)'
-                value={newOrder}
-                onChange={(e) =>
-                  setNewOrder(
-                    e.target.value === '' ? '' : Number(e.target.value)
-                  )
-                }
-                disabled={adding}
-              />
+              <div className='flex gap-4 mb-2'>
+                <input
+                  className='block w-32 px-3 py-2 border rounded'
+                  type='number'
+                  placeholder='Order'
+                  value={newOrder}
+                  onChange={(e) =>
+                    setNewOrder(
+                      e.target.value === '' ? '' : Number(e.target.value)
+                    )
+                  }
+                  disabled={adding}
+                />
+                <input
+                  className='block w-32 px-3 py-2 border rounded'
+                  type='number'
+                  placeholder='Chapter #'
+                  value={newChapterNumber}
+                  onChange={(e) =>
+                    setNewChapterNumber(
+                      e.target.value === '' ? '' : Number(e.target.value)
+                    )
+                  }
+                  disabled={adding}
+                />
+                <input
+                  className='block w-32 px-3 py-2 border rounded'
+                  type='number'
+                  placeholder='Reading Time (s)'
+                  value={newReadingTime}
+                  onChange={(e) =>
+                    setNewReadingTime(
+                      e.target.value === '' ? '' : Number(e.target.value)
+                    )
+                  }
+                  disabled={adding}
+                />
+              </div>
               <button
                 type='submit'
                 className='btn-primary px-4 py-2 rounded'
                 disabled={adding}
               >
-                {adding ? 'Adding...' : 'Add Chapter'}
+                {adding ? 'Adding...' : 'Add Paragraph'}
               </button>
             </form>
           </>
         ) : (
           <>
-            <div className='text-gray-500'>No chapters found.</div>
-            {/* Add new chapter form if no chapters exist */}
+            <div className='text-gray-500'>No paragraphs found.</div>
+            {/* Add new paragraph form if no paragraphs exist */}
             <form
-              onSubmit={handleAddChapter}
+              onSubmit={handleAddParagraph}
               className='mb-8 p-4 border rounded bg-gray-50 dark:bg-gray-900'
             >
-              <h3 className='text-lg font-semibold mb-2'>Add New Chapter</h3>
+              <h3 className='text-lg font-semibold mb-2'>Add New Paragraph</h3>
               {addError && <div className='text-red-500 mb-2'>{addError}</div>}
-              <input
-                className='block w-full mb-2 px-3 py-2 border rounded'
-                placeholder='Chapter title'
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                disabled={adding}
-              />
               <textarea
                 className='block w-full mb-2 px-3 py-2 border rounded'
-                placeholder='Chapter content'
+                placeholder='Paragraph content'
                 value={newContent}
                 rows={6}
                 onChange={(e) => setNewContent(e.target.value)}
                 disabled={adding}
               />
-              <input
-                className='block w-32 mb-2 px-3 py-2 border rounded'
-                type='number'
-                placeholder='Order (optional)'
-                value={newOrder}
-                onChange={(e) =>
-                  setNewOrder(
-                    e.target.value === '' ? '' : Number(e.target.value)
-                  )
-                }
-                disabled={adding}
-              />
+              <div className='flex gap-4 mb-2'>
+                <input
+                  className='block w-32 px-3 py-2 border rounded'
+                  type='number'
+                  placeholder='Order'
+                  value={newOrder}
+                  onChange={(e) =>
+                    setNewOrder(
+                      e.target.value === '' ? '' : Number(e.target.value)
+                    )
+                  }
+                  disabled={adding}
+                />
+                <input
+                  className='block w-32 px-3 py-2 border rounded'
+                  type='number'
+                  placeholder='Chapter #'
+                  value={newChapterNumber}
+                  onChange={(e) =>
+                    setNewChapterNumber(
+                      e.target.value === '' ? '' : Number(e.target.value)
+                    )
+                  }
+                  disabled={adding}
+                />
+                <input
+                  className='block w-32 px-3 py-2 border rounded'
+                  type='number'
+                  placeholder='Reading Time (s)'
+                  value={newReadingTime}
+                  onChange={(e) =>
+                    setNewReadingTime(
+                      e.target.value === '' ? '' : Number(e.target.value)
+                    )
+                  }
+                  disabled={adding}
+                />
+              </div>
               <button
                 type='submit'
                 className='btn-primary px-4 py-2 rounded'
                 disabled={adding}
               >
-                {adding ? 'Adding...' : 'Add Chapter'}
+                {adding ? 'Adding...' : 'Add Paragraph'}
               </button>
             </form>
           </>

@@ -2,19 +2,48 @@ import api from './api';
 import { Book } from '../types';
 
 export const bookService = {
-  updateChapter: async (
-    chapterId: string,
-    data: { title: string; content: string }
+  updateParagraph: async (
+    paragraphId: string,
+    data: {
+      content: string;
+      order?: number;
+      chapterNumber?: number;
+      readingTimeEst?: number;
+    }
   ): Promise<any> => {
-    const response = await api.put(`/books/chapters/${chapterId}`, data);
+    const response = await api.put(`/books/paragraphs/${paragraphId}`, data);
     return response.data;
   },
 
-  createChapter: async (
+  createParagraph: async (
     bookId: string,
-    data: { title: string; content: string; order?: number }
+    data: {
+      content: string;
+      order?: number;
+      chapterNumber?: number;
+      readingTimeEst?: number;
+    }
   ): Promise<any> => {
-    const response = await api.post(`/books/${bookId}/chapters`, data);
+    const response = await api.post(`/books/${bookId}/paragraphs`, data);
+    return response.data;
+  },
+
+  getParagraphs: async (bookId: string, params: any = {}): Promise<any> => {
+    const response = await api.get(`/paragraphs/book/${bookId}`, { params });
+    return response.data;
+  },
+
+  getParagraph: async (id: string, params: any = {}): Promise<any> => {
+    const response = await api.get(`/paragraphs/${id}`, { params });
+    return response.data;
+  },
+
+  deleteParagraph: async (id: string): Promise<void> => {
+    await api.delete(`/paragraphs/${id}`);
+  },
+
+  getBookStructure: async (bookId: string): Promise<any> => {
+    const response = await api.get(`/paragraphs/book/${bookId}/chapters`);
     return response.data;
   },
 
@@ -29,8 +58,13 @@ export const bookService = {
     return response.data;
   },
 
+  updateBook: async (id: string, data: any): Promise<Book> => {
+    const response = await api.put(`/books/${id}`, data);
+    return response.data;
+  },
+
   createBook: async (data: any): Promise<Book> => {
-    // data: { title, language, imageUrl, collectionId, isPublic, authorIds, tagIds, chapters }
+    // data: { title, language, imageUrl, collectionId, isPublic, isDraft, authorIds, tagIds }
     const response = await api.post('/books', data);
     return response.data.book || response.data;
   },

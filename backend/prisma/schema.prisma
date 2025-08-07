@@ -15,25 +15,47 @@ enum UserRole {
   ADMIN
 }
 
+enum ReportType {
+  CONTENT_ERROR
+  SPELLING_ERROR
+  INAPPROPRIATE_CONTENT
+  COPYRIGHT_VIOLATION
+  DUPLICATE_CONTENT
+  MISSING_INFORMATION
+  INCORRECT_INFORMATION
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+  DISMISSED
+}
+
 model User {
-  id                String            @id @default(uuid())
+  id                String              @id @default(uuid())
   name              String
-  email             String            @unique
+  email             String              @unique
   password          String
-  role              UserRole          @default(USER)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  role              UserRole            @default(USER)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
   imageUrl          String?
   books             Book[]
-  ownedCollections  Collection[]      @relation("OwnedCollections")
+  ownedCollections  Collection[]        @relation("OwnedCollections")
   sharedCollections CollectionShare[]
   sharedNotes       NoteShare[]
   preferences       UserPreference[]
   progress          Progress[]
   notes             Note[]
   bookRatings       BookRating[]
-  chapterRatings    ChapterRating[]
+  paragraphRatings  ParagraphRating[]
   authorRatings     AuthorRating[]
+  createdTags       Tag[]               // User-created tags
+  reports           Report[]            // Reports created by this user
+  resolvedReports   Report[]            @relation("ResolvedReports") // Reports resolved by this admin
 }
 
 model UserPreference {
@@ -99,6 +121,7 @@ model Book {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   isPublic          Boolean      @default(false)
+  isDraft          Boolean      @default(true)
   deletedAt         DateTime?
   createdBy         String?
   updatedBy         String?
@@ -106,11 +129,12 @@ model Book {
   user              User?        @relation(fields: [userId], references: [id])
   collection        Collection?  @relation(fields: [collectionId], references: [id])
   publisher         Publisher?   @relation(fields: [publisherId], references: [id])
-  chapters          Chapter[]
+  paragraphs        Paragraph[]
   tags              BookTag[]
   ratings           BookRating[]
   authors           BookAuthor[]
   Note              Note[]
+  reports           Report[]
 
   @@index([workId])
   @@index([userId])
@@ -118,6 +142,7 @@ model Book {
   @@index([publisherId])
   @@index([deletedAt])
   @@index([isPublic])
+  @@index([isDraft])
   @@index([language])
   @@index([originalLanguage])
   @@index([createdAt])
@@ -129,24 +154,34 @@ model Book {
   @@index([workId, language]) // All editions of a work in specific language
   @@index([userId, deletedAt]) // User's books
   @@index([isPublic, deletedAt]) // Public books
+  @@index([userId, isDraft]) // User's drafts vs published books
   @@index([language, isPublic]) // Books by language
   @@index([publisherId, editionPublished]) // Books by publisher and year
 }
 
 model Tag {
-  id          String       @id @default(uuid())
-  name        String       @unique
+  id          String         @id @default(uuid())
+  name        String         @unique
   description String?
+  isSystem    Boolean        @default(false) // true for system tags, false for user tags
+  createdBy   String?        // userId for user-created tags, null for system tags
+  isPublic    Boolean        @default(false) // Whether user tag can be used by others
   deletedAt   DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  creator     User?          @relation(fields: [createdBy], references: [id])
   books       BookTag[]
-  chapters    ChapterTag[]
+  paragraphs  ParagraphTag[]
   authors     AuthorTag[]
   notes       NoteTag[]
 
   @@index([name])
   @@index([deletedAt])
+  @@index([isSystem])
+  @@index([createdBy])
+  @@index([isPublic])
+  @@index([isSystem, isPublic]) // For filtering available tags
+  @@index([createdBy, name]) // For user's tag management
 }
 
 model BookTag {
@@ -156,14 +191,16 @@ model BookTag {
   tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([bookId, tagId])
+  @@index([bookId])
+  @@index([tagId])
 }
 
-model Chapter {
+model Paragraph {
   id              String          @id @default(uuid())
   bookId          String
-  title           String?
   content         String
   order           Int
+  chapterNumber   Int?            // Which chapter this paragraph belongs to
   readingTimeEst  Int?            // Estimated reading time in minutes
   deletedAt       DateTime?
   createdAt       DateTime        @default(now())
@@ -173,45 +210,52 @@ model Chapter {
   book            Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
   notes           Note[]
   progress        Progress[]
-  tags            ChapterTag[]
-  ratings         ChapterRating[]
+  tags            ParagraphTag[]
+  ratings         ParagraphRating[]
+  reports         Report[]
 
   @@index([bookId])
   @@index([order])
+  @@index([chapterNumber])
   @@index([deletedAt])
-  @@index([bookId, order]) // Composite for chapter ordering
+  @@index([bookId, order]) // Composite for paragraph ordering
+  @@index([bookId, chapterNumber]) // Composite for chapter grouping
 }
 
 
 model Progress {
-  id        String   @id @default(uuid())
-  userId    String
-  chapterId String
-  position  Int // e.g., character or word index in chapter
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  userId      String
+  paragraphId String
+  position    Int      // Character or word index in paragraph
+  percentage  Float?   // Percentage read in this paragraph (0.0 to 1.0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  user    User    @relation(fields: [userId], references: [id])
-  chapter Chapter @relation(fields: [chapterId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+  paragraph Paragraph @relation(fields: [paragraphId], references: [id])
 
-  @@unique([userId, chapterId])
+  @@unique([userId, paragraphId])
   @@index([userId])
-  @@index([chapterId])
+  @@index([paragraphId])
   @@index([updatedAt])
   @@index([userId, updatedAt]) // Recent reading activity
+  @@index([userId, percentage]) // Reading completion tracking
 }
 
 model Note {
   id            String    @id @default(uuid())
   userId        String
   bookId        String?
-  chapterId     String
-  startIndex    Int
-  endIndex      Int
-  text          String
-  firstContent  String?
-  secondContent String?
-  thirdContent  String?
+  paragraphId   String
+  startIndex    Int?      // Start position of selected text (null for whole paragraph notes)
+  endIndex      Int?      // End position of selected text (null for whole paragraph notes)
+  selectedText  String?   // The actual selected text for quick reference (null for whole paragraph)
+  text          String    // User's note content
+  firstContent  String?   // Additional note content
+  secondContent String?   // Additional note content  
+  thirdContent  String?   // Additional note content
+  noteType      String?   // Type of note: "highlight", "comment", "question", "paragraph_note", etc.
   isPublic      Boolean   @default(false)
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
@@ -221,16 +265,20 @@ model Note {
 
   user       User        @relation(fields: [userId], references: [id])
   book       Book?       @relation(fields: [bookId], references: [id])
-  chapter    Chapter?    @relation(fields: [chapterId], references: [id])
+  paragraph  Paragraph?  @relation(fields: [paragraphId], references: [id])
   tags       NoteTag[]
   sharedWith NoteShare[]
+  reports    Report[]    // Reports about this note
 
   @@index([userId])
   @@index([bookId])
-  @@index([chapterId])
+  @@index([paragraphId])
   @@index([deletedAt])
   @@index([isPublic])
   @@index([createdAt])
+  @@index([noteType])
+  @@index([paragraphId, startIndex]) // For finding notes in specific text ranges
+  @@index([paragraphId, noteType]) // For finding different types of notes per paragraph
 }
 
 model NoteTag {
@@ -240,6 +288,8 @@ model NoteTag {
   tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([noteId, tagId])
+  @@index([noteId]) // For finding all tags of a note
+  @@index([tagId])  // For finding all notes with a tag
 }
 
 model Author {
@@ -253,6 +303,7 @@ model Author {
   tags      AuthorTag[]
   links     AuthorLink[]
   ratings   AuthorRating[]
+  reports   Report[]
 
   @@index([name])
   @@index([deletedAt])
@@ -270,6 +321,7 @@ model Publisher {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   books       Book[]
+  reports     Report[]
 
   @@index([name])
   @@index([country])
@@ -287,13 +339,15 @@ model BookAuthor {
   @@index([bookId, position]) // For ordered author listing
 }
 
-model ChapterTag {
-  chapterId String
-  tagId     String
-  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+model ParagraphTag {
+  paragraphId String
+  tagId       String
+  paragraph   Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
-  @@id([chapterId, tagId])
+  @@id([paragraphId, tagId])
+  @@index([paragraphId])
+  @@index([tagId])
 }
 
 model AuthorTag {
@@ -303,6 +357,8 @@ model AuthorTag {
   tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([authorId, tagId])
+  @@index([authorId])
+  @@index([tagId])
 }
 
 model AuthorLink {
@@ -311,60 +367,68 @@ model AuthorLink {
   url      String
   label    String?
   author   Author  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
 }
 
 model BookRating {
   id        String   @id @default(uuid())
   userId    String
   bookId    String
-  rating    Int // e.g. 1-5
+  rating    Int      // e.g. 1-5 (should be validated in application: 1 <= rating <= 5)
   comment   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  reports Report[] // Reports about this rating
 
   @@unique([userId, bookId])
   @@index([bookId])
   @@index([rating])
   @@index([createdAt])
+  @@index([userId, rating]) // For user's rating history
 }
 
-model ChapterRating {
-  id        String   @id @default(uuid())
-  userId    String
-  chapterId String
-  rating    Int // e.g. 1-5
-  comment   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model ParagraphRating {
+  id          String   @id @default(uuid())
+  userId      String
+  paragraphId String
+  rating      Int      // e.g. 1-5 (should be validated in application: 1 <= rating <= 5)
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paragraph Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  reports   Report[]  // Reports about this rating
 
-  @@unique([userId, chapterId])
-  @@index([chapterId])
+  @@unique([userId, paragraphId])
+  @@index([paragraphId])
   @@index([rating])
   @@index([createdAt])
+  @@index([userId, rating]) // For user's rating history
 }
 
 model AuthorRating {
   id        String   @id @default(uuid())
   userId    String
   authorId  String
-  rating    Int // e.g. 1-5
+  rating    Int      // e.g. 1-5 (should be validated in application: 1 <= rating <= 5)
   comment   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   author Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reports Report[] // Reports about this rating
 
   @@unique([userId, authorId])
   @@index([authorId])
   @@index([rating])
   @@index([createdAt])
+  @@index([userId, rating]) // For user's rating history
 }
 
 model NoteShare {
@@ -375,4 +439,62 @@ model NoteShare {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([noteId, userId])
+}
+
+model Report {
+  id          String       @id @default(uuid())
+  userId      String       // User who submitted the report
+  reportType  ReportType
+  status      ReportStatus @default(PENDING)
+  description String       // User's description of the issue
+  adminNotes  String?      // Internal notes from admin/moderator (ADMIN-ONLY ACCESS)
+  
+  // Polymorphic relationship - only one of these should be set
+  bookId            String?
+  paragraphId       String?
+  authorId          String?
+  publisherId       String?
+  noteId            String?         // Report about a specific note
+  bookRatingId      String?         // Report about a book rating
+  paragraphRatingId String?         // Report about a paragraph rating  
+  authorRatingId    String?         // Report about an author rating
+  
+  // Resolution details (ADMIN-ONLY ACCESS)
+  resolvedAt  DateTime?
+  resolvedBy  String?      // Admin user ID who resolved it
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relationships
+  user            User              @relation(fields: [userId], references: [id])
+  book            Book?             @relation(fields: [bookId], references: [id])
+  paragraph       Paragraph?        @relation(fields: [paragraphId], references: [id])
+  author          Author?           @relation(fields: [authorId], references: [id])
+  publisher       Publisher?        @relation(fields: [publisherId], references: [id])
+  note            Note?             @relation(fields: [noteId], references: [id])
+  bookRating      BookRating?       @relation(fields: [bookRatingId], references: [id])
+  paragraphRating ParagraphRating?  @relation(fields: [paragraphRatingId], references: [id])
+  authorRating    AuthorRating?     @relation(fields: [authorRatingId], references: [id])
+  resolver        User?             @relation("ResolvedReports", fields: [resolvedBy], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([reportType])
+  @@index([createdAt])
+  @@index([bookId])
+  @@index([paragraphId])
+  @@index([authorId])
+  @@index([publisherId])
+  @@index([noteId])
+  @@index([bookRatingId])
+  @@index([paragraphRatingId])
+  @@index([authorRatingId])
+  @@index([resolvedBy])
+  @@index([status, createdAt]) // For admin dashboard - pending reports first
+  @@index([userId, status]) // User's report history
+  @@index([reportType, status]) // For filtering by type and status
+  
+  // NOTE: Access to Report data should be restricted to ADMIN users only
+  // Implement this restriction in your application layer/middleware
 }
