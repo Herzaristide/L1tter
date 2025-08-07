@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { bookService } from '../services/bookService';
+import ContextMenu from '../components/ContextMenu';
 
 const Reading: React.FC = () => {
   const { bookId } = useParams<{ bookId: string }>();
   const [book, setBook] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    selectedText: string;
+  } | null>(null);
 
   useEffect(() => {
     const fetchBook = async () => {
@@ -22,6 +28,51 @@ const Reading: React.FC = () => {
     if (bookId) fetchBook();
   }, [bookId]);
 
+  const handleTextSelection = (event: React.MouseEvent) => {
+    event.preventDefault();
+    const selection = window.getSelection();
+
+    if (selection && selection.toString().trim().length > 0) {
+      const selectedText = selection.toString().trim();
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        selectedText,
+      });
+    }
+  };
+
+  const handleContextMenuAction = (action: string, text: string) => {
+    switch (action) {
+      case 'copy':
+        navigator.clipboard.writeText(text);
+        console.log('Copied to clipboard:', text);
+        break;
+      case 'highlight':
+        console.log('Highlight text:', text);
+        // TODO: Implement highlighting functionality
+        break;
+      case 'note':
+        console.log('Add note for text:', text);
+        // TODO: Implement note creation
+        break;
+      case 'search':
+        console.log('Search for text:', text);
+        // TODO: Implement search functionality
+        break;
+      default:
+        break;
+    }
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+    // Clear text selection
+    window.getSelection()?.removeAllRanges();
+  };
+
   if (loading) {
     return (
       <div className='flex justify-center items-center h-full py-16'>
@@ -37,38 +88,106 @@ const Reading: React.FC = () => {
   }
 
   return (
-    <div className='max-w-3xl mx-auto py-8 px-4'>
-      <div className='flex items-center gap-6 mb-8'>
-        <img
-          src={book.imageUrl || '/default-book.png'}
-          alt={book.title}
-          className='w-24 h-36 object-cover rounded border'
-        />
-        <div>
-          <h1 className='text-2xl font-bold mb-2'>{book.title}</h1>
-          {book.authors && book.authors.length > 0 && (
-            <p className='text-gray-600'>
-              by {book.authors.map((a: any) => a.author.name).join(', ')}
-            </p>
+    <div className='min-h-screen bg-white dark:bg-black lg:ml-72 transition-all duration-300'>
+      <div className='max-w-4xl mx-auto px-8 py-12'>
+        {/* Book Header */}
+        <div className='border-b border-gray-100 dark:border-gray-800 pb-12 mb-16'>
+          <div className='flex items-start gap-8'>
+            <img
+              src={book.imageUrl || '/default-book.png'}
+              alt={book.title}
+              className='w-32 h-48 object-cover border border-gray-200 dark:border-gray-800'
+            />
+            <div className='flex-1'>
+              <h1 className='text-4xl font-light text-black dark:text-white tracking-wider uppercase mb-4'>
+                {book.title}
+              </h1>
+              {book.authors && book.authors.length > 0 && (
+                <p className='text-lg text-gray-600 dark:text-gray-400 font-light tracking-wide mb-6'>
+                  by {book.authors.map((a: any) => a.author.name).join(', ')}
+                </p>
+              )}
+
+              {/* Book Stats */}
+              <div className='grid grid-cols-3 gap-8 text-sm text-gray-500 dark:text-gray-400 font-light tracking-wide uppercase border-t border-gray-100 dark:border-gray-800 pt-6'>
+                {book._count?.paragraphs && (
+                  <div>
+                    <span className='block text-black dark:text-white text-lg font-light'>
+                      {book._count.paragraphs}
+                    </span>
+                    Paragraphs
+                  </div>
+                )}
+                {book.language && (
+                  <div>
+                    <span className='block text-black dark:text-white text-lg font-light'>
+                      {book.language.toUpperCase()}
+                    </span>
+                    Language
+                  </div>
+                )}
+                {book.paragraphs && book.paragraphs.length > 0 && (
+                  <div>
+                    <span className='block text-black dark:text-white text-lg font-light'>
+                      ~
+                      {Math.ceil(
+                        book.paragraphs.reduce(
+                          (total: number, p: any) =>
+                            total + (p.readingTimeEst || 0),
+                          0
+                        ) / 60
+                      )}
+                    </span>
+                    Minutes
+                  </div>
+                )}
+              </div>
+
+              {/* Description */}
+              {book.description && (
+                <p className='text-gray-700 dark:text-gray-300 mt-8 font-light leading-relaxed tracking-wide'>
+                  {book.description}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+        {/* Content */}
+        <div className='space-y-16'>
+          {book.paragraphs && book.paragraphs.length > 0 ? (
+            book.paragraphs.map((paragraph: any, index: number) => (
+              <section key={paragraph.id} className='scroll-mt-24'>
+                <div
+                  className='max-w-none text-black dark:text-white leading-loose tracking-wide font-light text-lg select-text text-justify'
+                  onContextMenu={handleTextSelection}
+                >
+                  <p className='mb-8'>{paragraph.content}</p>
+                </div>
+              </section>
+            ))
+          ) : (
+            <div className='text-center py-32 text-gray-500 dark:text-gray-400'>
+              <p className='text-xl font-light tracking-wider uppercase mb-4'>
+                No Content Available
+              </p>
+              <p className='text-sm font-light tracking-wide'>
+                This book doesn't have any paragraphs yet.
+              </p>
+            </div>
           )}
         </div>
       </div>
-      <div className='space-y-12'>
-        {book.chapters && book.chapters.length > 0 ? (
-          book.chapters.map((chapter: any) => (
-            <section key={chapter.id} className='scroll-mt-24'>
-              <h2 className='text-xl font-semibold mb-2'>
-                {chapter.title || `Chapter ${chapter.order}`}
-              </h2>
-              <div className='prose prose-lg max-w-none text-gray-900 dark:text-gray-100 whitespace-pre-line'>
-                {chapter.content}
-              </div>
-            </section>
-          ))
-        ) : (
-          <div className='text-gray-500'>No chapters found.</div>
-        )}
-      </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          selectedText={contextMenu.selectedText}
+          onClose={closeContextMenu}
+          onAction={handleContextMenuAction}
+        />
+      )}
     </div>
   );
 };

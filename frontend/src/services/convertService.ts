@@ -1,11 +1,6 @@
 import api from './api';
 
-export type ConversionMode =
-  | 'paragraphs'
-  | 'structure'
-  | 'smart'
-  | 'page-structure'
-  | 'raw';
+export type ConversionMode = 'paragraphs';
 
 export interface Chapter {
   title: string;
@@ -19,13 +14,9 @@ export const convertService = {
    * @param mode - Processing mode: 'paragraphs', 'structure' (default), 'smart', 'page-structure', or 'raw'
    * @returns Promise<Chapter[]> - The extracted chapters
    */
-  async convertPdfToText(
-    file: File,
-    mode: ConversionMode = 'structure'
-  ): Promise<Chapter[]> {
+  async convertPdfToText(file: File): Promise<Chapter[]> {
     const formData = new FormData();
     formData.append('pdf', file);
-    formData.append('mode', mode);
 
     try {
       const response = await api.post('/convert/pdf-to-text', formData, {
@@ -53,12 +44,9 @@ export const convertService = {
    * @param mode - Processing mode: 'paragraphs', 'structure' (default), 'smart', 'page-structure', or 'raw'
    * @returns Promise<Chapter[]> - The extracted chapters
    */
-  async convertPdfFromUrl(
-    url: string,
-    mode: ConversionMode = 'structure'
-  ): Promise<Chapter[]> {
+  async convertPdfFromUrl(url: string): Promise<Chapter[]> {
     try {
-      const response = await api.post('/convert/pdf-from-url', { url, mode });
+      const response = await api.post('/convert/pdf-from-url', { url });
 
       if (response.data.success) {
         return response.data.chapters;
