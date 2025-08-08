@@ -16,15 +16,15 @@ import Reading from './pages/Reading';
 import Management from './pages/Management';
 import Editing from './pages/Editing';
 import CreateBook from './pages/CreateBook';
+import { ReactLenis } from 'lenis/react';
 
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
 
   return (
-    <div className='h-screen w-screen bg-white dark:bg-black text-black dark:text-white'>
+    <div className='min-h-screen w-full bg-white dark:bg-black text-black dark:text-white'>
       {isAuthenticated && <Navbar />}
-
-      <main className='px-8 lg:px-40 h-screen w-screen'>
+      <main className='px-8 lg:px-40 w-full'>
         <Routes>
           <Route
             path='/login'
@@ -96,9 +96,11 @@ const App: React.FC = () => {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
+        <ReactLenis root>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </ReactLenis>
       </AuthProvider>
     </ThemeProvider>
   );

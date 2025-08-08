@@ -379,6 +379,7 @@ const Reading: React.FC = () => {
       </div>
       <div className='bg-gradient-to-t from-white to-white/10 w-full h-20 fixed bottom-0 left-0' />
 
+      <div className='bg-gradient-to-b from-white to-white/10 w-full h-20 fixed left-0 top-0' />
       {/* Context Menu */}
       {contextMenu && (
         <ContextMenu
