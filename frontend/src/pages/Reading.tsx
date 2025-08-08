@@ -351,7 +351,7 @@ const Reading: React.FC = () => {
           </div>
         </div>
         {/* Content */}
-        <div className='space-y-16'>
+        <div className='space-y-8'>
           {book.paragraphs && book.paragraphs.length > 0 ? (
             book.paragraphs.map((paragraph: any, index: number) => (
               <section key={paragraph.id} className='scroll-mt-24'>
