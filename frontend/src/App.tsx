@@ -12,6 +12,7 @@ import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Library from './pages/Library';
 import Reading from './pages/Reading';
 import Management from './pages/Management';
 import Editing from './pages/Editing';
@@ -43,6 +44,14 @@ const AppRoutes: React.FC = () => {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path='/library'
+            element={
+              <ProtectedRoute>
+                <Library />
               </ProtectedRoute>
             }
           />

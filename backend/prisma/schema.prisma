@@ -135,6 +135,7 @@ model Book {
   authors           BookAuthor[]
   Note              Note[]
   reports           Report[]
+  progress          Progress[]
 
   @@index([workId])
   @@index([userId])
@@ -226,21 +227,23 @@ model Paragraph {
 model Progress {
   id          String   @id @default(uuid())
   userId      String
+  bookId      String
   paragraphId String
-  position    Int      // Character or word index in paragraph
-  percentage  Float?   // Percentage read in this paragraph (0.0 to 1.0)
+  position    Float    @default(0) // Percentage progress in the book (0.0 to 100.0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id])
-  paragraph Paragraph @relation(fields: [paragraphId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book      Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  paragraph Paragraph @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, paragraphId])
+  @@unique([userId, bookId])
   @@index([userId])
+  @@index([bookId])
   @@index([paragraphId])
   @@index([updatedAt])
   @@index([userId, updatedAt]) // Recent reading activity
-  @@index([userId, percentage]) // Reading completion tracking
+  @@index([userId, position]) // Reading completion tracking
 }
 
 model Note {

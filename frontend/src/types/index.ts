@@ -6,15 +6,60 @@ export interface User {
   createdAt: string;
 }
 
-export interface Book {
+export interface Author {
   id: string;
-  title: string;
-  author: string;
-  userId?: string;
+  name: string;
+  bio?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Publisher {
+  id: string;
+  name: string;
+  description?: string;
+  website?: string;
+  address?: string;
+  foundedYear?: number;
+  country?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BookAuthor {
+  bookId: string;
+  authorId: string;
+  position?: number;
+  author: Author;
+}
+
+export interface Book {
+  id: string;
+  workId?: string;
+  title: string;
+  description?: string;
+  edition?: string;
+  editionPublished?: number;
+  originalLanguage: string;
+  originalPublished?: number;
+  imageUrl?: string;
+  shoppingUrl?: string;
+  language: string;
+  slug?: string;
+  genre?: string;
+  isPublic: boolean;
+  isDraft: boolean;
+  userId?: string;
+  collectionId?: string;
+  publisherId?: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+  orderInCollection?: number;
   paragraphs?: Paragraph[];
   progress?: Progress[];
+  authors?: BookAuthor[];
+  publisher?: Publisher;
   _count?: {
     paragraphs: number;
   };

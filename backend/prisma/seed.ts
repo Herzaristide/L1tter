@@ -651,33 +651,21 @@ async function main() {
     data: [
       {
         userId: user1.id,
+        bookId: book1.id,
         paragraphId: paragraph1.id,
-        position: 50,
-        percentage: 0.8,
-      },
-      {
-        userId: user1.id,
-        paragraphId: paragraph8.id,
-        position: 25,
-        percentage: 0.4,
+        position: 25.5,
       },
       {
         userId: user2.id,
+        bookId: book2.id,
         paragraphId: paragraph6.id,
-        position: 80,
-        percentage: 1.0,
-      },
-      {
-        userId: user2.id,
-        paragraphId: paragraph10.id,
-        position: 30,
-        percentage: 0.3,
+        position: 80.0,
       },
       {
         userId: adminUser.id,
-        paragraphId: paragraph4.id,
-        position: 100,
-        percentage: 0.9,
+        bookId: book3.id,
+        paragraphId: paragraph8.id,
+        position: 45.2,
       },
     ],
   });

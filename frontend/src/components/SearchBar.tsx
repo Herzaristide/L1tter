@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Search, X } from 'lucide-react';
 import searchService, { SearchResult } from '../services/searchService';
 
 interface SearchBarProps {
@@ -74,62 +75,51 @@ const SearchBar: React.FC<SearchBarProps> = ({
         className='w-full flex justify-center'
         autoComplete='off'
       >
-        <div className='relative flex items-center w-full max-w-2xl bg-white dark:bg-gray-900 rounded-full shadow-xl border border-gray-200 dark:border-gray-800 px-4 py-2 focus-within:ring-2 focus-within:ring-primary-500 transition-all'>
-          <span className='absolute left-4 top-1/2 -translate-y-1/2 text-primary-500 dark:text-primary-400 pointer-events-none'>
-            <svg
-              className='w-6 h-6'
-              fill='none'
-              stroke='currentColor'
-              strokeWidth={2}
-              viewBox='0 0 24 24'
-            >
-              <circle cx='11' cy='11' r='8' />
-              <line x1='21' y1='21' x2='16.65' y2='16.65' />
-            </svg>
-          </span>
+        <div className='relative w-full max-w-2xl'>
+          <Search className='absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5' />
           <input
             type='text'
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={placeholder}
-            className='w-full pl-12 pr-24 py-3 text-lg rounded-full bg-transparent focus:outline-none focus:ring-0 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white'
+            className='w-full pl-12 pr-12 py-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 
+                     rounded-xl text-black dark:text-white placeholder-gray-500 font-light tracking-wide
+                     focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent
+                     transition-all duration-200'
             aria-label='Search'
             autoComplete='off'
           />
           {isLoading && (
-            <div className='absolute right-24 top-1/2 -translate-y-1/2'>
-              <div className='animate-spin h-5 w-5 border-2 border-primary-500 border-t-transparent rounded-full'></div>
+            <div className='absolute right-4 top-1/2 transform -translate-y-1/2'>
+              <div className='animate-spin h-5 w-5 border-2 border-gray-400 border-t-transparent rounded-full'></div>
             </div>
           )}
           {query && !isLoading && (
             <button
               type='button'
               onClick={handleClear}
-              className='absolute right-20 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2'
+              className='absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 
+                       transition-colors duration-200'
               aria-label='Clear search'
             >
-              <span aria-hidden='true'>✕</span>
+              <X className='w-5 h-5' />
             </button>
           )}
-          <button
-            type='submit'
-            className='absolute right-4 top-1/2 -translate-y-1/2 bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-full text-base font-semibold shadow-md transition-colors'
-            disabled={isLoading}
-          >
-            <span className='hidden sm:inline'>Search</span>
-            <span className='sm:hidden'>🔍</span>
-          </button>
         </div>
       </form>
 
       {/* Search Results Dropdown */}
       <div className='relative w-full max-w-2xl'>
         {showResults && results.length > 0 && (
-          <div className='absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 max-h-96 overflow-y-auto z-50'>
+          <div
+            className='absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl 
+                        border border-gray-200 dark:border-gray-700 max-h-96 overflow-y-auto z-50'
+          >
             {results.map((result, index) => (
               <div
                 key={`${result.type}-${result.id}-${index}`}
-                className='p-4 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer'
+                className='p-4 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-600 
+                         last:border-b-0 cursor-pointer transition-colors duration-200'
                 onClick={() => {
                   onSearch(query);
                   setShowResults(false);
@@ -138,20 +128,23 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 <div className='flex items-start justify-between'>
                   <div className='flex-1'>
                     <div className='flex items-center gap-2 mb-1'>
-                      <span className='text-xs px-2 py-1 bg-primary-100 text-primary-700 rounded-full font-medium'>
+                      <span
+                        className='text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 
+                                     rounded-full font-light uppercase tracking-wide'
+                      >
                         {result.type}
                       </span>
                       {result._rankingScore && (
-                        <span className='text-xs text-gray-500'>
+                        <span className='text-xs text-gray-500 font-light tracking-wide'>
                           {Math.round(result._rankingScore * 100)}% match
                         </span>
                       )}
                     </div>
-                    <h4 className='font-semibold text-gray-900 mb-1'>
+                    <h4 className='font-light text-black dark:text-white tracking-wide mb-1'>
                       {result.title || result.name || 'Untitled'}
                     </h4>
                     {(result.description || result.bio || result.content) && (
-                      <p className='text-sm text-gray-600 line-clamp-2'>
+                      <p className='text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed line-clamp-2'>
                         {result.description || result.bio || result.content}
                       </p>
                     )}
@@ -162,8 +155,13 @@ const SearchBar: React.FC<SearchBarProps> = ({
           </div>
         )}
         {showResults && results.length === 0 && query && !isLoading && (
-          <div className='absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 text-center text-gray-500'>
-            No results found for "{query}"
+          <div
+            className='absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl 
+                        border border-gray-200 dark:border-gray-700 p-6 text-center'
+          >
+            <p className='text-gray-500 dark:text-gray-400 font-light tracking-wide'>
+              No results found for "{query}"
+            </p>
           </div>
         )}
       </div>

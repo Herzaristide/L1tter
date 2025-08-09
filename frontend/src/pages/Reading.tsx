@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { bookService } from '../services/bookService';
 import { notesService } from '../services/notesService';
+import { progressService } from '../services/progressService';
 import ContextMenu from '../components/ContextMenu';
 
 const Reading: React.FC = () => {
@@ -9,6 +10,12 @@ const Reading: React.FC = () => {
   const [book, setBook] = useState<any | null>(null);
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentProgress, setCurrentProgress] = useState<any>(null);
+  const [visibleParagraphs, setVisibleParagraphs] = useState<Set<string>>(
+    new Set()
+  );
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const progressUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -21,23 +28,149 @@ const Reading: React.FC = () => {
 
   useEffect(() => {
     const fetchBookAndNotes = async () => {
+      if (!bookId) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
+
       try {
-        const [bookData, notesData] = await Promise.all([
-          bookService.getBook(bookId!),
-          notesService.getNotes({ bookId: bookId! }),
-        ]);
+        // Fetch book data first - this is critical
+        const bookData = await bookService.getBook(bookId);
         setBook(bookData);
-        setNotes(notesData.notes || notesData || []);
-      } catch (err) {
+
+        // Fetch notes and progress separately - these are optional
+        try {
+          const notesData = await notesService.getNotes({ bookId });
+          setNotes(notesData.notes || notesData || []);
+        } catch (notesError) {
+          console.warn('Failed to load notes:', notesError);
+          setNotes([]);
+        }
+
+        try {
+          const progressData = await progressService.getBookProgress(bookId);
+          setCurrentProgress(progressData);
+        } catch (progressError) {
+          console.warn('Failed to load progress:', progressError);
+          setCurrentProgress(null);
+        }
+      } catch (bookError) {
+        console.error('Failed to load book:', bookError);
         setBook(null);
         setNotes([]);
+        setCurrentProgress(null);
       } finally {
         setLoading(false);
       }
     };
-    if (bookId) fetchBookAndNotes();
+
+    fetchBookAndNotes();
   }, [bookId]);
+
+  // Update progress when user reads
+  const updateProgress = useCallback(
+    async (paragraphId: string, position: number) => {
+      if (!bookId) return;
+
+      try {
+        const progressData = await progressService.updateProgress(
+          paragraphId,
+          position
+        );
+        setCurrentProgress(progressData);
+      } catch (error) {
+        console.error('Failed to update progress:', error);
+      }
+    },
+    [bookId]
+  );
+
+  // Debounced progress update
+  const debouncedUpdateProgress = useCallback(
+    (paragraphId: string, position: number) => {
+      if (progressUpdateTimeoutRef.current) {
+        clearTimeout(progressUpdateTimeoutRef.current);
+      }
+
+      progressUpdateTimeoutRef.current = setTimeout(() => {
+        updateProgress(paragraphId, position);
+      }, 1000); // Update progress after 1 second of stable viewing
+    },
+    [updateProgress]
+  );
+
+  // Set up intersection observer for paragraph visibility tracking
+  useEffect(() => {
+    if (!book?.paragraphs || book.paragraphs.length === 0) return;
+
+    const observerOptions = {
+      root: null,
+      rootMargin: '-20% 0px -20% 0px', // Only trigger when paragraph is in the middle 60% of viewport
+      threshold: 0.5, // Paragraph must be at least 50% visible
+    };
+
+    observerRef.current = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const paragraphId = entry.target.getAttribute('data-paragraph-id');
+        if (!paragraphId) return;
+
+        if (entry.isIntersecting) {
+          setVisibleParagraphs((prev) => new Set(prev).add(paragraphId));
+
+          // Find paragraph index for position calculation
+          const paragraphIndex = book.paragraphs.findIndex(
+            (p: any) => p.id === paragraphId
+          );
+          if (paragraphIndex !== -1) {
+            const position = (paragraphIndex / book.paragraphs.length) * 100;
+            debouncedUpdateProgress(paragraphId, Math.round(position));
+          }
+        } else {
+          setVisibleParagraphs((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(paragraphId);
+            return newSet;
+          });
+        }
+      });
+    }, observerOptions);
+
+    // Observe all paragraph elements
+    const paragraphElements = document.querySelectorAll('[data-paragraph-id]');
+    paragraphElements.forEach((element) => {
+      observerRef.current?.observe(element);
+    });
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+      if (progressUpdateTimeoutRef.current) {
+        clearTimeout(progressUpdateTimeoutRef.current);
+      }
+    };
+  }, [book?.paragraphs, debouncedUpdateProgress]);
+
+  // Scroll to last read position when book loads
+  useEffect(() => {
+    if (book?.paragraphs && currentProgress?.paragraphId) {
+      const timeoutId = setTimeout(() => {
+        const paragraphElement = document.querySelector(
+          `[data-paragraph-id="${currentProgress.paragraphId}"]`
+        );
+        if (paragraphElement) {
+          paragraphElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          });
+        }
+      }, 500); // Small delay to ensure DOM is ready
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [book?.paragraphs, currentProgress?.paragraphId]);
 
   const handleTextSelection = (
     event: React.MouseEvent,
@@ -271,22 +404,65 @@ const Reading: React.FC = () => {
     };
   }, [contextMenu, selectedNote]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+      if (progressUpdateTimeoutRef.current) {
+        clearTimeout(progressUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
+
   if (loading) {
     return (
-      <div className='flex justify-center items-center h-full py-16'>
-        <div className='animate-spin h-8 w-8 border-4 border-primary-500 border-t-transparent rounded-full'></div>
+      <div className='min-h-screen bg-white dark:bg-black flex justify-center items-center'>
+        <div className='text-center'>
+          <div className='animate-spin h-8 w-8 border-2 border-gray-400 border-t-transparent rounded-full mx-auto mb-4'></div>
+          <p className='text-gray-500 dark:text-gray-400 font-light tracking-wide'>
+            Loading book...
+          </p>
+        </div>
       </div>
     );
   }
 
   if (!book) {
     return (
-      <div className='text-center py-16 text-gray-500'>Book not found.</div>
+      <div className='min-h-screen bg-white dark:bg-black flex justify-center items-center'>
+        <div className='text-center py-16'>
+          <div className='text-6xl mb-4'>📚</div>
+          <p className='text-xl font-light text-gray-500 dark:text-gray-400 tracking-wider uppercase mb-2'>
+            Book Not Found
+          </p>
+          <p className='text-sm font-light text-gray-400 tracking-wide mb-6'>
+            The book you're looking for doesn't exist or you don't have access
+            to it.
+          </p>
+          <p className='text-xs font-light text-gray-400 tracking-wide'>
+            Book ID: {bookId}
+          </p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <div className='min-h-screen bg-white dark:bg-black lg:ml-72 transition-all duration-300'>
+    <div className='min-h-screen bg-white dark:bg-black transition-all duration-300'>
+      {/* Progress Bar */}
+      {currentProgress && (
+        <div className='fixed top-0 left-0 w-full z-50'>
+          <div className='h-1 bg-gray-200 dark:bg-gray-800'>
+            <div
+              className='h-full bg-black dark:bg-white transition-all duration-300'
+              style={{ width: `${currentProgress.position || 0}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className='max-w-4xl mx-auto px-8 py-12'>
         {/* Book Header */}
         <div className='border-b border-gray-100 dark:border-gray-800 pb-12 mb-16'>
@@ -304,6 +480,36 @@ const Reading: React.FC = () => {
                 <p className='text-lg text-gray-600 dark:text-gray-400 font-light tracking-wide mb-6'>
                   by {book.authors.map((a: any) => a.author.name).join(', ')}
                 </p>
+              )}
+
+              {/* Reading Progress Info */}
+              {currentProgress && (
+                <div className='mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700'>
+                  <h3 className='text-sm font-light text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2'>
+                    Reading Progress
+                  </h3>
+                  <div className='flex items-center gap-4'>
+                    <div className='flex-1'>
+                      <div className='flex justify-between text-sm mb-1'>
+                        <span className='text-black dark:text-white font-light'>
+                          {Math.round(currentProgress.position || 0)}% Complete
+                        </span>
+                        <span className='text-gray-500 dark:text-gray-400 font-light'>
+                          Last read:{' '}
+                          {new Date(
+                            currentProgress.updatedAt
+                          ).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className='h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden'>
+                        <div
+                          className='h-full bg-black dark:bg-white transition-all duration-300'
+                          style={{ width: `${currentProgress.position || 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* Book Stats */}
@@ -377,9 +583,9 @@ const Reading: React.FC = () => {
           )}
         </div>
       </div>
-      <div className='bg-gradient-to-t from-white to-white/10 w-full h-20 fixed bottom-0 left-0' />
+      <div className='bg-gradient-to-t from-white to-white/10 w-full h-20 fixed bottom-0 left-0 dark:from-black dark:to-black/10' />
 
-      <div className='bg-gradient-to-b from-white to-white/10 w-full h-20 fixed left-0 top-0' />
+      <div className='bg-gradient-to-b from-white to-white/10 dark:from-black dark:to-black/10 w-full h-20 fixed left-0 top-0' />
       {/* Context Menu */}
       {contextMenu && (
         <ContextMenu
