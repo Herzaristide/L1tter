@@ -1,15 +1,104 @@
-import React, { useState, useEffect } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  memo,
+  useMemo,
+  useRef,
+} from 'react';
 import { convertService, Chapter } from '../services/convertService';
 import { bookService } from '../services/bookService';
 
 interface Paragraph {
+  id: string;
   content: string;
   order: number;
   chapterNumber?: number;
   readingTimeEst?: number;
+  selected: boolean;
 }
 
+// Memoized paragraph component to prevent unnecessary re-renders
+const ParagraphItem = memo(
+  ({
+    paragraph,
+    onContentChange,
+    onToggleSelect,
+  }: {
+    paragraph: Paragraph;
+    onContentChange: (id: string, content: string) => void;
+    onToggleSelect: (id: string) => void;
+  }) => {
+    console.log(
+      `🔄 ParagraphItem rendering - ID: ${paragraph.id.slice(-8)}, selected: ${
+        paragraph.selected
+      }`
+    );
+
+    const adjustTextareaHeight = useCallback(
+      (textarea: HTMLTextAreaElement) => {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.max(textarea.scrollHeight, 80) + 'px';
+      },
+      []
+    );
+
+    const handleToggle = useCallback(() => {
+      onToggleSelect(paragraph.id);
+    }, [paragraph.id, onToggleSelect]);
+
+    const handleContentChange = useCallback(
+      (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        onContentChange(paragraph.id, e.target.value);
+        adjustTextareaHeight(e.target);
+      },
+      [paragraph.id, onContentChange, adjustTextareaHeight]
+    );
+
+    return (
+      <div
+        className={`relative flex mt-2 mr-2 ${
+          !paragraph.selected ? 'opacity-50' : ''
+        }`}
+      >
+        {/* Selection checkbox */}
+        <div className='absolute -left-8 top-3 z-10'>
+          <input
+            type='checkbox'
+            checked={paragraph.selected}
+            onChange={handleToggle}
+            className='w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2'
+            title={
+              paragraph.selected ? 'Unselect paragraph' : 'Select paragraph'
+            }
+          />
+        </div>
+
+        <textarea
+          value={paragraph.content}
+          onChange={handleContentChange}
+          onInput={(e) => adjustTextareaHeight(e.target as HTMLTextAreaElement)}
+          ref={(el) => {
+            if (el) {
+              // Adjust height when element is first rendered
+              setTimeout(() => adjustTextareaHeight(el), 0);
+            }
+          }}
+          className={`w-full px-6 py-3 border rounded-2xl bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 resize-none text-sm overflow-hidden ${
+            !paragraph.selected ? 'bg-gray-100 dark:bg-gray-800' : ''
+          }`}
+          placeholder='Paragraph content...'
+          style={{ height: 'auto' }}
+          disabled={!paragraph.selected}
+        />
+      </div>
+    );
+  }
+);
+
 const CreateBook: React.FC = () => {
+  console.log(`🏠 CreateBook component rendering`);
+
   const [bookTitle, setBookTitle] = useState('');
   const [bookAuthor, setBookAuthor] = useState('');
   const [description, setDescription] = useState('');
@@ -25,6 +114,95 @@ const CreateBook: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [pdfUrl, setPdfUrl] = useState('');
   const [showOptionalFields, setShowOptionalFields] = useState(false);
+
+  // Use refs to create stable callback references that never change
+  const callbacksRef = useRef({
+    updateContent: (id: string, content: string) => {},
+    toggleSelect: (id: string) => {},
+  });
+
+  // Update the refs when the component state changes
+  callbacksRef.current.updateContent = useCallback(
+    (id: string, content: string) => {
+      console.log(`📝 Content change for ID: ${id.slice(-8)}`);
+      setParagraphs((prevParagraphs) => {
+        const newParagraphs = [...prevParagraphs];
+        const index = newParagraphs.findIndex((p) => p.id === id);
+        if (index !== -1) {
+          newParagraphs[index] = { ...newParagraphs[index], content };
+        }
+        return newParagraphs;
+      });
+    },
+    []
+  );
+
+  callbacksRef.current.toggleSelect = useCallback((id: string) => {
+    console.log(`🎯 Toggle called for ID: ${id.slice(-8)}`);
+    const startTime = performance.now();
+
+    setParagraphs((prevParagraphs) => {
+      console.log(`📊 Total paragraphs in array: ${prevParagraphs.length}`);
+
+      const newParagraphs = [...prevParagraphs];
+      const index = newParagraphs.findIndex((p) => p.id === id);
+
+      console.log(`🔍 Found paragraph at index: ${index}`);
+
+      if (index !== -1) {
+        const oldSelected = newParagraphs[index].selected;
+        newParagraphs[index] = {
+          ...newParagraphs[index],
+          selected: !newParagraphs[index].selected,
+        };
+        console.log(
+          `✅ Updated paragraph ${id.slice(
+            -8
+          )}: ${oldSelected} → ${!oldSelected}`
+        );
+      }
+
+      const endTime = performance.now();
+      console.log(
+        `⏱️ Toggle operation took: ${(endTime - startTime).toFixed(2)}ms`
+      );
+
+      return newParagraphs;
+    });
+  }, []);
+
+  // Pagination for large books to prevent performance issues
+  const [currentPage, setCurrentPage] = useState(0);
+  const PARAGRAPHS_PER_PAGE = 50; // Limit to 50 paragraphs per page
+
+  const totalPages = Math.ceil(paragraphs.length / PARAGRAPHS_PER_PAGE);
+  const startIndex = currentPage * PARAGRAPHS_PER_PAGE;
+  const endIndex = Math.min(
+    startIndex + PARAGRAPHS_PER_PAGE,
+    paragraphs.length
+  );
+  const visibleParagraphs = paragraphs.slice(startIndex, endIndex);
+
+  console.log(
+    `📄 Rendering page ${currentPage + 1}/${totalPages}, showing paragraphs ${
+      startIndex + 1
+    }-${endIndex} of ${paragraphs.length}`
+  );
+
+  // Memoized calculations to prevent expensive re-computations
+  const selectedParagraphsCount = useMemo(() => {
+    console.log(
+      `🧮 Calculating selectedParagraphsCount for ${paragraphs.length} paragraphs`
+    );
+    const count = paragraphs.filter((p) => p.selected).length;
+    console.log(`📊 Selected paragraphs count: ${count}`);
+    return count;
+  }, [paragraphs]);
+
+  const selectedParagraphs = useMemo(() => {
+    console.log(`🧮 Calculating selectedParagraphs array`);
+    return paragraphs.filter((p) => p.selected);
+  }, [paragraphs]);
 
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -57,13 +235,18 @@ const CreateBook: React.FC = () => {
           .filter((p) => p.trim().length > 0);
 
         paragraphTexts.forEach((paragraphText, paragraphIndex) => {
+          const timestamp = Date.now() + paragraphIndex; // Add index to ensure uniqueness
           extractedParagraphs.push({
+            id: `file-paragraph-${timestamp}-${chapterIndex}-${paragraphIndex}-${Math.random()
+              .toString(36)
+              .substr(2, 9)}`,
             content: paragraphText.trim(),
-            order: extractedParagraphs.length + 1,
+            order: timestamp, // Use timestamp instead of sequential numbering
             chapterNumber: chapterIndex + 1,
             readingTimeEst: Math.ceil(
               paragraphText.trim().split(' ').length / 3
             ), // ~3 words per second
+            selected: true, // All paragraphs selected by default
           });
         });
       });
@@ -73,10 +256,12 @@ const CreateBook: React.FC = () => {
       console.error('Error reading file:', error);
       setParagraphs([
         {
+          id: `error-paragraph-${Date.now()}`,
           content: `Error reading file: ${
             error instanceof Error ? error.message : 'Unknown error'
           }`,
           order: 1,
+          selected: true,
         },
       ]);
     } finally {
@@ -100,13 +285,18 @@ const CreateBook: React.FC = () => {
           .filter((p) => p.trim().length > 0);
 
         paragraphTexts.forEach((paragraphText, paragraphIndex) => {
+          const timestamp = Date.now() + paragraphIndex; // Add index to ensure uniqueness
           extractedParagraphs.push({
+            id: `url-paragraph-${timestamp}-${chapterIndex}-${paragraphIndex}-${Math.random()
+              .toString(36)
+              .substr(2, 9)}`,
             content: paragraphText.trim(),
-            order: extractedParagraphs.length + 1,
+            order: timestamp, // Use timestamp instead of sequential numbering
             chapterNumber: chapterIndex + 1,
             readingTimeEst: Math.ceil(
               paragraphText.trim().split(' ').length / 3
             ), // ~3 words per second
+            selected: true, // All paragraphs selected by default
           });
         });
       });
@@ -116,10 +306,12 @@ const CreateBook: React.FC = () => {
       console.error('Error reading PDF from URL:', error);
       setParagraphs([
         {
+          id: `url-error-paragraph-${Date.now()}`,
           content: `Error reading PDF from URL: ${
             error instanceof Error ? error.message : 'Unknown error'
           }`,
           order: 1,
+          selected: true,
         },
       ]);
     } finally {
@@ -127,22 +319,10 @@ const CreateBook: React.FC = () => {
     }
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    // Handle form submission here
-    console.log({ bookTitle, bookAuthor, paragraphs });
-  };
-
-  const updateParagraphContent = (index: number, content: string) => {
-    const updatedParagraphs = [...paragraphs];
-    updatedParagraphs[index].content = content;
-    setParagraphs(updatedParagraphs);
-  };
-
-  const adjustTextareaHeight = (textarea: HTMLTextAreaElement) => {
+  const adjustTextareaHeight = useCallback((textarea: HTMLTextAreaElement) => {
     textarea.style.height = 'auto';
     textarea.style.height = Math.max(textarea.scrollHeight, 80) + 'px';
-  };
+  }, []);
 
   // Adjust all textareas when paragraphs change
   useEffect(() => {
@@ -152,43 +332,29 @@ const CreateBook: React.FC = () => {
         adjustTextareaHeight(textarea);
       }
     });
-  }, [paragraphs]);
+  }, [visibleParagraphs]); // Only adjust when visible paragraphs change
 
-  const updateParagraphChapter = (index: number, chapterNumber: number) => {
-    const updatedParagraphs = [...paragraphs];
-    updatedParagraphs[index].chapterNumber = chapterNumber;
-    setParagraphs(updatedParagraphs);
-  };
-
-  const updateParagraphReadingTime = (index: number, readingTime: number) => {
-    const updatedParagraphs = [...paragraphs];
-    updatedParagraphs[index].readingTimeEst = readingTime;
-    setParagraphs(updatedParagraphs);
-  };
-
-  const addNewParagraph = () => {
+  const addNewParagraph = useCallback(() => {
     const newParagraph: Paragraph = {
+      id: `paragraph-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       content: '',
-      order: paragraphs.length + 1,
+      order: Date.now(), // Use timestamp for order to avoid conflicts
       chapterNumber: 1,
       readingTimeEst: 0,
+      selected: true, // New paragraphs are selected by default
     };
-    setParagraphs([...paragraphs, newParagraph]);
-  };
-
-  const removeParagraph = (index: number) => {
-    const updatedParagraphs = paragraphs.filter((_, i) => i !== index);
-    // Reorder remaining paragraphs
-    updatedParagraphs.forEach((paragraph, i) => {
-      paragraph.order = i + 1;
-    });
-    setParagraphs(updatedParagraphs);
-  };
+    setParagraphs((prev) => [...prev, newParagraph]);
+  }, []);
 
   // Save book as draft handler
   const handleSave = async () => {
     if (!bookTitle.trim()) {
       alert('Please enter a book title');
+      return;
+    }
+
+    if (selectedParagraphsCount === 0) {
+      alert('Please select at least one paragraph to save');
       return;
     }
 
@@ -216,12 +382,13 @@ const CreateBook: React.FC = () => {
 
       const createdBook = await bookService.createBook(bookData);
 
-      // Create all paragraphs for the book
-      if (paragraphs.length > 0) {
-        for (const paragraph of paragraphs) {
+      // Create only selected paragraphs for the book
+      if (selectedParagraphs.length > 0) {
+        for (let i = 0; i < selectedParagraphs.length; i++) {
+          const paragraph = selectedParagraphs[i];
           await bookService.createParagraph(createdBook.id, {
             content: paragraph.content,
-            order: paragraph.order,
+            order: i + 1, // Assign sequential order only when saving
             chapterNumber: paragraph.chapterNumber,
             readingTimeEst: paragraph.readingTimeEst,
           });
@@ -257,13 +424,21 @@ const CreateBook: React.FC = () => {
           <button
             type='button'
             onClick={handleSave}
-            disabled={isSaving || !bookTitle.trim()}
+            disabled={
+              isSaving || !bookTitle.trim() || selectedParagraphsCount === 0
+            }
             className='px-8 py-3 bg-black dark:bg-white text-white dark:text-black 
               disabled:bg-gray-300 disabled:cursor-not-allowed
               hover:bg-gray-800 dark:hover:bg-gray-200 transition-all duration-200
               font-light tracking-wider text-sm uppercase border border-black dark:border-white'
           >
-            {isSaving ? 'Saving...' : 'Save Draft'}
+            {isSaving
+              ? 'Saving...'
+              : `Save Draft ${
+                  selectedParagraphsCount > 0
+                    ? `(${selectedParagraphsCount} paragraphs)`
+                    : ''
+                }`}
           </button>
         </div>
         <form className='space-y-12'>
@@ -510,11 +685,38 @@ const CreateBook: React.FC = () => {
                 </div>
               </div>
             ) : paragraphs.length > 0 ? (
-              <div className='flex-1 flex flex-col gap-4 overflow-y-auto p-2'>
+              <div className='flex-1 flex flex-col gap-4 overflow-y-auto p-2 pl-10'>
                 <div className='flex items-center justify-between'>
-                  <label className='text-gray-700 dark:text-gray-200 font-medium'>
-                    Book Paragraphs ({paragraphs.length} found)
-                  </label>
+                  <div className='flex flex-col'>
+                    <label className='text-gray-700 dark:text-gray-200 font-medium'>
+                      Book Paragraphs ({paragraphs.length} found,{' '}
+                      {selectedParagraphsCount} selected)
+                    </label>
+                    <div className='flex items-center gap-4 mt-2'>
+                      <button
+                        type='button'
+                        onClick={() => {
+                          setParagraphs((prev) =>
+                            prev.map((p) => ({ ...p, selected: true }))
+                          );
+                        }}
+                        className='text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300'
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type='button'
+                        onClick={() => {
+                          setParagraphs((prev) =>
+                            prev.map((p) => ({ ...p, selected: false }))
+                          );
+                        }}
+                        className='text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300'
+                      >
+                        Unselect All
+                      </button>
+                    </div>
+                  </div>
                   <button
                     type='button'
                     onClick={addNewParagraph}
@@ -523,36 +725,54 @@ const CreateBook: React.FC = () => {
                     Add Paragraph
                   </button>
                 </div>
-                {paragraphs.map((paragraph, index) => (
-                  <div key={index} className='relative flex mt-2 mr-2'>
-                    <button
-                      type='button'
-                      onClick={() => removeParagraph(index)}
-                      className='absolute -top-2 -right-2 z-10 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full text-xs flex items-center justify-center'
-                      title='Delete paragraph'
-                    >
-                      ×
-                    </button>
-                    <textarea
-                      value={paragraph.content}
-                      onChange={(e) => {
-                        updateParagraphContent(index, e.target.value);
-                        adjustTextareaHeight(e.target);
-                      }}
-                      onInput={(e) =>
-                        adjustTextareaHeight(e.target as HTMLTextAreaElement)
-                      }
-                      ref={(el) => {
-                        if (el) {
-                          // Adjust height when element is first rendered
-                          setTimeout(() => adjustTextareaHeight(el), 0);
-                        }
-                      }}
-                      className='w-full px-6 py-3 border rounded-2xl bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 resize-none text-sm overflow-hidden'
-                      placeholder='Paragraph content...'
-                      style={{ height: 'auto' }}
-                    />
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className='flex items-center justify-between mb-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg'>
+                    <span className='text-sm text-gray-600 dark:text-gray-400'>
+                      Page {currentPage + 1} of {totalPages} (showing{' '}
+                      {visibleParagraphs.length} paragraphs)
+                    </span>
+                    <div className='flex items-center gap-2'>
+                      <button
+                        onClick={() => setCurrentPage(0)}
+                        disabled={currentPage === 0}
+                        className='px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded disabled:opacity-50'
+                      >
+                        First
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 0}
+                        className='px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded disabled:opacity-50'
+                      >
+                        Prev
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage === totalPages - 1}
+                        className='px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded disabled:opacity-50'
+                      >
+                        Next
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(totalPages - 1)}
+                        disabled={currentPage === totalPages - 1}
+                        className='px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded disabled:opacity-50'
+                      >
+                        Last
+                      </button>
+                    </div>
                   </div>
+                )}
+
+                {visibleParagraphs.map((paragraph) => (
+                  <ParagraphItem
+                    key={paragraph.id}
+                    paragraph={paragraph}
+                    onContentChange={callbacksRef.current.updateContent}
+                    onToggleSelect={callbacksRef.current.toggleSelect}
+                  />
                 ))}
               </div>
             ) : (
@@ -573,6 +793,26 @@ const CreateBook: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Save Summary */}
+          {paragraphs.length > 0 && (
+            <div className='mt-6 p-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg'>
+              <div className='flex items-center justify-between text-sm text-gray-600 dark:text-gray-400'>
+                <span>
+                  Ready to save:{' '}
+                  <strong className='text-black dark:text-white'>
+                    {selectedParagraphsCount}
+                  </strong>{' '}
+                  of <strong>{paragraphs.length}</strong> paragraphs
+                </span>
+                {selectedParagraphsCount === 0 && (
+                  <span className='text-red-500 dark:text-red-400'>
+                    Select at least one paragraph to save
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>

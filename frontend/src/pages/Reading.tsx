@@ -25,6 +25,7 @@ const Reading: React.FC = () => {
     endIndex?: number;
   } | null>(null);
   const [selectedNote, setSelectedNote] = useState<any | null>(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true); // Control auto-scroll behavior
 
   useEffect(() => {
     const fetchBookAndNotes = async () => {
@@ -153,24 +154,29 @@ const Reading: React.FC = () => {
     };
   }, [book?.paragraphs, debouncedUpdateProgress]);
 
-  // Scroll to last read position when book loads
+  // Scroll to last read position when book loads (can be disabled)
   useEffect(() => {
-    if (book?.paragraphs && currentProgress?.paragraphId) {
+    if (book?.paragraphs && currentProgress?.paragraphId && autoScrollEnabled) {
       const timeoutId = setTimeout(() => {
         const paragraphElement = document.querySelector(
           `[data-paragraph-id="${currentProgress.paragraphId}"]`
         );
         if (paragraphElement) {
+          console.log(
+            `📖 Auto-scrolling to last read position: paragraph ${currentProgress.paragraphId}`
+          );
           paragraphElement.scrollIntoView({
             behavior: 'smooth',
             block: 'start',
           });
+          // Disable auto-scroll after first use to prevent repeated scrolling
+          setAutoScrollEnabled(false);
         }
       }, 500); // Small delay to ensure DOM is ready
 
       return () => clearTimeout(timeoutId);
     }
-  }, [book?.paragraphs, currentProgress?.paragraphId]);
+  }, [book?.paragraphs, currentProgress?.paragraphId, autoScrollEnabled]);
 
   const handleTextSelection = (
     event: React.MouseEvent,
@@ -485,9 +491,26 @@ const Reading: React.FC = () => {
               {/* Reading Progress Info */}
               {currentProgress && (
                 <div className='mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700'>
-                  <h3 className='text-sm font-light text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2'>
-                    Reading Progress
-                  </h3>
+                  <div className='flex items-center justify-between mb-2'>
+                    <h3 className='text-sm font-light text-gray-600 dark:text-gray-400 uppercase tracking-wide'>
+                      Reading Progress
+                    </h3>
+                    <div className='flex items-center gap-2 text-xs'>
+                      <span className='text-gray-500 dark:text-gray-400'>
+                        Auto-scroll:
+                      </span>
+                      <button
+                        onClick={() => setAutoScrollEnabled(!autoScrollEnabled)}
+                        className={`px-2 py-1 rounded text-xs font-light transition-colors ${
+                          autoScrollEnabled
+                            ? 'bg-black dark:bg-white text-white dark:text-black'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                        }`}
+                      >
+                        {autoScrollEnabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+                  </div>
                   <div className='flex items-center gap-4'>
                     <div className='flex-1'>
                       <div className='flex justify-between text-sm mb-1'>

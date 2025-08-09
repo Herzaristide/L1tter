@@ -535,7 +535,7 @@ const Library: React.FC = () => {
                 {/* Admin Edit Button */}
                 {user?.role === 'ADMIN' && (
                   <Link
-                    to={`/editing/${book.id}`}
+                    to={`/${book.id}/edit`}
                     onClick={(e) => e.stopPropagation()}
                     className='z-50 absolute top-2 left-2 bg-black dark:bg-white text-white dark:text-black
                              p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200
