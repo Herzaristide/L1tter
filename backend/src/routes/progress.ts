@@ -189,6 +189,7 @@ router.get(
           },
           paragraph: true,
         },
+
         orderBy: {
           updatedAt: 'desc',
         },
@@ -206,11 +207,17 @@ router.get(
         .filter((progress) => progress.position < 100) // Not completed
         .map((progress) => ({
           ...progress.book,
-          progress: {
-            position: progress.position,
-            paragraphId: progress.paragraphId,
-            updatedAt: progress.updatedAt,
-          },
+          progress: [
+            {
+              id: progress.id,
+              userId: progress.userId,
+              bookId: progress.bookId,
+              paragraphId: progress.paragraphId,
+              position: progress.position,
+              createdAt: progress.createdAt,
+              updatedAt: progress.updatedAt,
+            },
+          ],
         }));
 
       const completed = Array.from(bookProgressMap.values())

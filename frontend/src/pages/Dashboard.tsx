@@ -19,9 +19,19 @@ const Dashboard: React.FC = () => {
       try {
         // Get user's reading progress and statistics
         const stats = await progressService.getStats();
+        console.log('📊 Raw API Response:', JSON.stringify(stats, null, 2));
 
         // Extract currently reading books from stats
         const currentlyReadingBooks = stats.currentlyReading || [];
+        console.log(
+          '📚 Books with progress:',
+          currentlyReadingBooks.map((book: Book) => ({
+            title: book.title,
+            progressExists: !!book.progress,
+            progressData: book.progress,
+          }))
+        );
+
         setBooks(currentlyReadingBooks);
       } catch (err) {
         console.log('Error fetching currently reading books:', err);

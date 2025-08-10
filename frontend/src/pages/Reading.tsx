@@ -15,7 +15,6 @@ const Reading: React.FC = () => {
     new Set()
   );
   const observerRef = useRef<IntersectionObserver | null>(null);
-  const progressUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -25,7 +24,10 @@ const Reading: React.FC = () => {
     endIndex?: number;
   } | null>(null);
   const [selectedNote, setSelectedNote] = useState<any | null>(null);
-  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true); // Control auto-scroll behavior
+  const [isOriginalHeaderVisible, setIsOriginalHeaderVisible] = useState(true);
+  const [isFloatingHeaderOpen, setIsFloatingHeaderOpen] = useState(false);
+  const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
+  const headerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchBookAndNotes = async () => {
@@ -80,6 +82,7 @@ const Reading: React.FC = () => {
           paragraphId,
           position
         );
+        console.log('📊 Progress updated:', { paragraphId, position });
         setCurrentProgress(progressData);
       } catch (error) {
         console.error('Failed to update progress:', error);
@@ -88,28 +91,100 @@ const Reading: React.FC = () => {
     [bookId]
   );
 
-  // Debounced progress update
-  const debouncedUpdateProgress = useCallback(
-    (paragraphId: string, position: number) => {
-      if (progressUpdateTimeoutRef.current) {
-        clearTimeout(progressUpdateTimeoutRef.current);
+  // Immediate progress update on scroll
+  const updateProgressOnScroll = useCallback(() => {
+    if (!book?.paragraphs || book.paragraphs.length === 0) return;
+
+    // Get all paragraph elements
+    const paragraphElements = document.querySelectorAll('[data-paragraph-id]');
+    if (paragraphElements.length === 0) return;
+
+    const viewportHeight = window.innerHeight;
+    const scrollTop = window.scrollY;
+
+    // Find the paragraph that's most prominently displayed
+    let currentParagraph = null;
+    let bestScore = -1;
+
+    paragraphElements.forEach((element) => {
+      const rect = element.getBoundingClientRect();
+      const elementTop = rect.top + scrollTop;
+      const elementBottom = rect.bottom + scrollTop;
+      const elementCenter = elementTop + rect.height / 2;
+      const viewportCenter = scrollTop + viewportHeight / 2;
+
+      // Calculate how much of the paragraph is visible
+      const visibleTop = Math.max(rect.top, 0);
+      const visibleBottom = Math.min(rect.bottom, viewportHeight);
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+      const visibilityRatio = visibleHeight / rect.height;
+
+      // Prefer paragraphs that are:
+      // 1. More visible (higher visibility ratio)
+      // 2. Closer to viewport center
+      // 3. At least 30% visible to avoid flickering
+      if (visibilityRatio > 0.3) {
+        const distanceFromCenter = Math.abs(elementCenter - viewportCenter);
+        const maxDistance = viewportHeight; // Normalize distance
+        const centerScore = 1 - distanceFromCenter / maxDistance;
+
+        // Combined score: 70% visibility, 30% center alignment
+        const score = visibilityRatio * 0.7 + centerScore * 0.3;
+
+        if (score > bestScore) {
+          bestScore = score;
+          currentParagraph = element;
+        }
       }
+    });
 
-      progressUpdateTimeoutRef.current = setTimeout(() => {
-        updateProgress(paragraphId, position);
-      }, 1000); // Update progress after 1 second of stable viewing
-    },
-    [updateProgress]
-  );
+    if (currentParagraph) {
+      const paragraphId = currentParagraph.getAttribute('data-paragraph-id');
+      if (paragraphId) {
+        // Find paragraph index for position calculation
+        const paragraphIndex = book.paragraphs.findIndex(
+          (p: any) => p.id === paragraphId
+        );
+        if (paragraphIndex !== -1) {
+          // Calculate more precise position based on scroll within the paragraph
+          const rect = currentParagraph.getBoundingClientRect();
+          const scrollTop = window.scrollY;
+          const elementTop = rect.top + scrollTop;
+          const viewportTop = scrollTop;
 
-  // Set up intersection observer for paragraph visibility tracking
+          // Calculate how far through this specific paragraph we are
+          const progressThroughParagraph = Math.max(
+            0,
+            Math.min(
+              1,
+              (viewportTop - elementTop + viewportHeight * 0.3) / rect.height
+            )
+          );
+
+          // Calculate overall book position
+          const basePosition = (paragraphIndex / book.paragraphs.length) * 100;
+          const paragraphWeight = (1 / book.paragraphs.length) * 100;
+          const precisePosition =
+            basePosition + progressThroughParagraph * paragraphWeight;
+
+          const finalPosition = Math.max(
+            0,
+            Math.min(100, Math.round(precisePosition))
+          );
+          updateProgress(paragraphId, finalPosition);
+        }
+      }
+    }
+  }, [book?.paragraphs, updateProgress]);
+
+  // Set up intersection observer for paragraph visibility tracking (simplified)
   useEffect(() => {
     if (!book?.paragraphs || book.paragraphs.length === 0) return;
 
     const observerOptions = {
       root: null,
-      rootMargin: '-20% 0px -20% 0px', // Only trigger when paragraph is in the middle 60% of viewport
-      threshold: 0.5, // Paragraph must be at least 50% visible
+      rootMargin: '0px',
+      threshold: 0.1, // Trigger when 10% of paragraph is visible
     };
 
     observerRef.current = new IntersectionObserver((entries) => {
@@ -119,15 +194,6 @@ const Reading: React.FC = () => {
 
         if (entry.isIntersecting) {
           setVisibleParagraphs((prev) => new Set(prev).add(paragraphId));
-
-          // Find paragraph index for position calculation
-          const paragraphIndex = book.paragraphs.findIndex(
-            (p: any) => p.id === paragraphId
-          );
-          if (paragraphIndex !== -1) {
-            const position = (paragraphIndex / book.paragraphs.length) * 100;
-            debouncedUpdateProgress(paragraphId, Math.round(position));
-          }
         } else {
           setVisibleParagraphs((prev) => {
             const newSet = new Set(prev);
@@ -148,15 +214,43 @@ const Reading: React.FC = () => {
       if (observerRef.current) {
         observerRef.current.disconnect();
       }
-      if (progressUpdateTimeoutRef.current) {
-        clearTimeout(progressUpdateTimeoutRef.current);
+    };
+  }, [book?.paragraphs]);
+
+  // Add scroll event listener for real-time progress updates
+  useEffect(() => {
+    if (!book?.paragraphs || book.paragraphs.length === 0) return;
+
+    // Throttle scroll events for better performance
+    let scrollTimeout: NodeJS.Timeout | null = null;
+
+    const handleScroll = () => {
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+
+      // Use a very short timeout to make it feel immediate but still performant
+      scrollTimeout = setTimeout(() => {
+        updateProgressOnScroll();
+      }, 100); // Update every 100ms during scroll
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    // Also update immediately when component mounts
+    updateProgressOnScroll();
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
       }
     };
-  }, [book?.paragraphs, debouncedUpdateProgress]);
+  }, [updateProgressOnScroll]);
 
-  // Scroll to last read position when book loads (can be disabled)
+  // Scroll to last read position when book loads (only once per session)
   useEffect(() => {
-    if (book?.paragraphs && currentProgress?.paragraphId && autoScrollEnabled) {
+    if (book?.paragraphs && currentProgress?.paragraphId && !hasAutoScrolled) {
       const timeoutId = setTimeout(() => {
         const paragraphElement = document.querySelector(
           `[data-paragraph-id="${currentProgress.paragraphId}"]`
@@ -169,15 +263,48 @@ const Reading: React.FC = () => {
             behavior: 'smooth',
             block: 'start',
           });
-          // Disable auto-scroll after first use to prevent repeated scrolling
-          setAutoScrollEnabled(false);
+          // Mark that auto-scroll has happened
+          setHasAutoScrolled(true);
         }
       }, 500); // Small delay to ensure DOM is ready
 
       return () => clearTimeout(timeoutId);
     }
-  }, [book?.paragraphs, currentProgress?.paragraphId, autoScrollEnabled]);
+  }, [book?.paragraphs, currentProgress?.paragraphId, hasAutoScrolled]);
 
+  // Detect when original header is out of view
+  useEffect(() => {
+    const handleScroll = () => {
+      if (headerRef.current) {
+        const headerRect = headerRef.current.getBoundingClientRect();
+        // Header is visible if any part of it is above the fold
+        const headerVisible = headerRect.bottom > 0;
+        setIsOriginalHeaderVisible(headerVisible);
+      }
+    };
+
+    // Throttle scroll events for better performance
+    let ticking = false;
+    const throttledHandleScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          handleScroll();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', throttledHandleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', throttledHandleScroll);
+    };
+  }, []);
+
+  const toggleFloatingHeader = () => {
+    setIsFloatingHeaderOpen(!isFloatingHeaderOpen);
+  };
   const handleTextSelection = (
     event: React.MouseEvent,
     paragraphId: string
@@ -416,9 +543,6 @@ const Reading: React.FC = () => {
       if (observerRef.current) {
         observerRef.current.disconnect();
       }
-      if (progressUpdateTimeoutRef.current) {
-        clearTimeout(progressUpdateTimeoutRef.current);
-      }
     };
   }, []);
 
@@ -469,9 +593,162 @@ const Reading: React.FC = () => {
         </div>
       )}
 
+      {/* Floating Header Toggle Button - Only shows when original header is not visible */}
+      {!isOriginalHeaderVisible && (
+        <div className='fixed top-4 right-4 z-50 flex items-center gap-2'>
+          {book?.title && (
+            <div className='bg-black/80 dark:bg-white/80 backdrop-blur-sm text-white dark:text-black px-3 py-1 rounded-full text-sm font-light max-w-xs truncate'>
+              {book.title}
+            </div>
+          )}
+          <button
+            onClick={toggleFloatingHeader}
+            className='w-10 h-10 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-all duration-300'
+            title={
+              isFloatingHeaderOpen
+                ? 'Hide floating header'
+                : 'Show floating header'
+            }
+          >
+            <svg
+              className={`w-5 h-5 transition-transform duration-300 ${
+                isFloatingHeaderOpen ? 'rotate-45' : 'rotate-0'
+              }`}
+              fill='none'
+              stroke='currentColor'
+              viewBox='0 0 24 24'
+            >
+              <path
+                strokeLinecap='round'
+                strokeLinejoin='round'
+                strokeWidth={2}
+                d='M12 4v16m8-8H4'
+              />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Floating Header Overlay */}
+      {isFloatingHeaderOpen && (
+        <div className='fixed inset-0 z-40 flex items-start justify-center pt-4'>
+          {/* Backdrop */}
+          <div
+            className='absolute inset-0 bg-black/50 backdrop-blur-sm'
+            onClick={() => setIsFloatingHeaderOpen(false)}
+          />
+
+          {/* Floating Header Content */}
+          <div className='relative bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-lg shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto'>
+            <div className='p-6'>
+              {/* Close Button */}
+              <button
+                onClick={() => setIsFloatingHeaderOpen(false)}
+                className='absolute top-4 right-4 w-8 h-8 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full flex items-center justify-center transition-colors'
+              >
+                <svg
+                  className='w-4 h-4'
+                  fill='none'
+                  stroke='currentColor'
+                  viewBox='0 0 24 24'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M6 18L18 6M6 6l12 12'
+                  />
+                </svg>
+              </button>
+
+              {/* Header Content - Same as original but compact */}
+              <div className='flex items-start gap-4 pr-8'>
+                <img
+                  src={book.imageUrl || '/default-book.png'}
+                  alt={book.title}
+                  className='w-20 h-28 object-cover border border-gray-200 dark:border-gray-800 rounded'
+                />
+                <div className='flex-1'>
+                  <h1 className='text-2xl font-light text-black dark:text-white tracking-wider uppercase mb-2'>
+                    {book.title}
+                  </h1>
+                  {book.authors && book.authors.length > 0 && (
+                    <p className='text-sm text-gray-600 dark:text-gray-400 font-light tracking-wide mb-3'>
+                      by{' '}
+                      {book.authors.map((a: any) => a.author.name).join(', ')}
+                    </p>
+                  )}
+
+                  {/* Compact Reading Progress */}
+                  {currentProgress && (
+                    <div className='mb-4 p-3 bg-gray-50 dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700'>
+                      <div className='flex justify-between text-xs mb-1'>
+                        <span className='text-black dark:text-white font-light'>
+                          {Math.round(currentProgress.position || 0)}% Complete
+                        </span>
+                        <span className='text-gray-500 dark:text-gray-400 font-light'>
+                          Last read:{' '}
+                          {new Date(
+                            currentProgress.updatedAt
+                          ).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className='h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden'>
+                        <div
+                          className='h-full bg-black dark:bg-white transition-all duration-300'
+                          style={{ width: `${currentProgress.position || 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Compact Stats */}
+                  <div className='grid grid-cols-3 gap-3 text-xs text-gray-500 dark:text-gray-400 font-light uppercase'>
+                    {book._count?.paragraphs && (
+                      <div>
+                        <span className='block text-black dark:text-white text-sm font-light'>
+                          {book._count.paragraphs}
+                        </span>
+                        Paragraphs
+                      </div>
+                    )}
+                    {book.language && (
+                      <div>
+                        <span className='block text-black dark:text-white text-sm font-light'>
+                          {book.language.toUpperCase()}
+                        </span>
+                        Language
+                      </div>
+                    )}
+                    {book.paragraphs && book.paragraphs.length > 0 && (
+                      <div>
+                        <span className='block text-black dark:text-white text-sm font-light'>
+                          ~
+                          {Math.ceil(
+                            book.paragraphs.reduce(
+                              (total: number, p: any) =>
+                                total + (p.readingTimeEst || 0),
+                              0
+                            ) / 60
+                          )}
+                        </span>
+                        Minutes
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className='max-w-4xl mx-auto px-8 py-12'>
-        {/* Book Header */}
-        <div className='border-b border-gray-100 dark:border-gray-800 pb-12 mb-16'>
+        {/* Original Book Header (always present at top of page) */}
+        <div
+          ref={headerRef}
+          className='border-b border-gray-100 dark:border-gray-800 pb-12 mb-16'
+        >
           <div className='flex items-start gap-8'>
             <img
               src={book.imageUrl || '/default-book.png'}
@@ -499,16 +776,24 @@ const Reading: React.FC = () => {
                       <span className='text-gray-500 dark:text-gray-400'>
                         Auto-scroll:
                       </span>
-                      <button
-                        onClick={() => setAutoScrollEnabled(!autoScrollEnabled)}
-                        className={`px-2 py-1 rounded text-xs font-light transition-colors ${
-                          autoScrollEnabled
-                            ? 'bg-black dark:bg-white text-white dark:text-black'
-                            : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-light ${
+                          hasAutoScrolled
+                            ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
+                            : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300'
                         }`}
                       >
-                        {autoScrollEnabled ? 'ON' : 'OFF'}
-                      </button>
+                        {hasAutoScrolled ? 'Completed' : 'Pending'}
+                      </span>
+                      {hasAutoScrolled && (
+                        <button
+                          onClick={() => setHasAutoScrolled(false)}
+                          className='px-2 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-400 rounded text-xs font-light transition-colors'
+                          title='Enable auto-scroll for next visit'
+                        >
+                          Reset
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className='flex items-center gap-4'>
@@ -527,7 +812,9 @@ const Reading: React.FC = () => {
                       <div className='h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden'>
                         <div
                           className='h-full bg-black dark:bg-white transition-all duration-300'
-                          style={{ width: `${currentProgress.position || 0}%` }}
+                          style={{
+                            width: `${currentProgress.position || 0}%`,
+                          }}
                         />
                       </div>
                     </div>
@@ -579,6 +866,7 @@ const Reading: React.FC = () => {
             </div>
           </div>
         </div>
+
         {/* Content */}
         <div className='space-y-8'>
           {book.paragraphs && book.paragraphs.length > 0 ? (

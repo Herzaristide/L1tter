@@ -48,6 +48,25 @@ const BookCard: React.FC<BookCardProps> = ({ book, link }) => {
             )}
           </div>
         )}
+
+        {/* Reading Progress Badge */}
+        {book.progress && book.progress.length > 0 && (
+          <>
+            <div className='absolute top-2 left-2'>
+              <div className='bg-blue-500/90 backdrop-blur-sm text-white px-2 py-1 rounded text-xs font-light'>
+                {Math.round(book.progress[0].position || 0)}% read
+              </div>
+            </div>
+
+            {/* Progress bar at bottom of image */}
+            <div className='absolute bottom-0 left-0 right-0 h-1 bg-black/20'>
+              <div
+                className='h-full bg-blue-500 transition-all duration-300'
+                style={{ width: `${book.progress[0].position || 0}%` }}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <div className='p-4 space-y-2'>
@@ -86,6 +105,37 @@ const BookCard: React.FC<BookCardProps> = ({ book, link }) => {
           <p className='text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed line-clamp-2'>
             {book.description}
           </p>
+        )}
+
+        {/* Reading Progress */}
+        {book.progress && book.progress.length > 0 && (
+          <div className='pt-2 border-t border-gray-100 dark:border-gray-700'>
+            <div className='flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-1'>
+              <span className='font-light'>Reading Progress</span>
+              <span className='font-medium text-blue-600 dark:text-blue-400'>
+                {Math.round(book.progress[0].position || 0)}%
+              </span>
+            </div>
+            <div className='w-full h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden'>
+              <div
+                className='h-full bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 transition-all duration-300 rounded-full'
+                style={{
+                  width: `${Math.min(book.progress[0].position || 0, 100)}%`,
+                }}
+              />
+            </div>
+            <div className='text-xs text-gray-500 dark:text-gray-500 mt-1 font-light'>
+              Last read:{' '}
+              {new Date(book.progress[0].updatedAt).toLocaleDateString(
+                'en-US',
+                {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                }
+              )}
+            </div>
+          </div>
         )}
       </div>
     </Link>
