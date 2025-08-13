@@ -85,6 +85,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
 
     setIsCreatingNote(true);
     try {
+      console.log(startIndex, endIndex);
       await notesService.createNote({
         bookId,
         paragraphId,

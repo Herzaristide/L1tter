@@ -4,6 +4,7 @@ import { bookService } from '../services/bookService';
 import { notesService } from '../services/notesService';
 import { progressService } from '../services/progressService';
 import ContextMenu from '../components/ContextMenu';
+import NotePopup from '../components/NotePopup';
 
 const Reading: React.FC = () => {
   const { bookId } = useParams<{ bookId: string }>();
@@ -24,6 +25,10 @@ const Reading: React.FC = () => {
     endIndex?: number;
   } | null>(null);
   const [selectedNote, setSelectedNote] = useState<any | null>(null);
+  const [notePopupPosition, setNotePopupPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [isOriginalHeaderVisible, setIsOriginalHeaderVisible] = useState(true);
   const [isFloatingHeaderOpen, setIsFloatingHeaderOpen] = useState(false);
   const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
@@ -225,6 +230,12 @@ const Reading: React.FC = () => {
     let scrollTimeout: NodeJS.Timeout | null = null;
 
     const handleScroll = () => {
+      // Close note popup when scrolling
+      if (selectedNote) {
+        setSelectedNote(null);
+        setNotePopupPosition(null);
+      }
+
       if (scrollTimeout) {
         clearTimeout(scrollTimeout);
       }
@@ -246,7 +257,7 @@ const Reading: React.FC = () => {
         clearTimeout(scrollTimeout);
       }
     };
-  }, [updateProgressOnScroll]);
+  }, [updateProgressOnScroll, selectedNote]);
 
   // Scroll to last read position when book loads (only once per session)
   useEffect(() => {
@@ -305,6 +316,96 @@ const Reading: React.FC = () => {
   const toggleFloatingHeader = () => {
     setIsFloatingHeaderOpen(!isFloatingHeaderOpen);
   };
+
+  // Calculate the actual text position within the original paragraph content by walking the DOM
+  const getTextPosition = (
+    range: Range,
+    paragraphElement: Element
+  ): { startIndex: number; endIndex: number } => {
+    const paragraphId = paragraphElement.getAttribute('data-paragraph-id');
+    if (!paragraphId) {
+      console.warn('No paragraph ID found');
+      return { startIndex: 0, endIndex: 0 };
+    }
+
+    // Find the paragraph data
+    const paragraph = book?.paragraphs?.find((p: any) => p.id === paragraphId);
+    if (!paragraph) {
+      console.warn('No paragraph data found for ID:', paragraphId);
+      return { startIndex: 0, endIndex: 0 };
+    }
+
+    console.log('Selection range:', {
+      startContainer: range.startContainer,
+      startOffset: range.startOffset,
+      endContainer: range.endContainer,
+      endOffset: range.endOffset,
+      selectedText: range.toString(),
+    });
+
+    // Function to get the text offset of a node relative to the paragraph
+    const getTextOffset = (node: Node, offset: number): number => {
+      let textOffset = 0;
+      const walker = document.createTreeWalker(
+        paragraphElement,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+      );
+
+      let currentNode;
+      while ((currentNode = walker.nextNode())) {
+        console.log('Walking text node:', currentNode.textContent);
+        if (currentNode === node) {
+          console.log('Found target node, offset:', textOffset + offset);
+          return textOffset + offset;
+        }
+        textOffset += (currentNode.textContent || '').length;
+      }
+
+      console.warn('Target node not found in tree walk');
+      // If we can't find the node, try to find it by traversing up the tree
+      let parentNode = node;
+      while (parentNode && parentNode !== paragraphElement) {
+        if (parentNode.nodeType === Node.TEXT_NODE) {
+          // Try walking again with the parent
+          break;
+        }
+        parentNode = parentNode.parentNode;
+      }
+
+      return textOffset;
+    };
+
+    try {
+      const startOffset = getTextOffset(
+        range.startContainer,
+        range.startOffset
+      );
+      const endOffset = getTextOffset(range.endContainer, range.endOffset);
+
+      console.log('Calculated offsets:', { startOffset, endOffset });
+
+      return {
+        startIndex: startOffset,
+        endIndex: endOffset,
+      };
+    } catch (e) {
+      console.error('Error calculating text position:', e);
+      // Fallback: try to find the text in the original content
+      const selectedText = range.toString();
+      const index = paragraph.content.indexOf(selectedText);
+      console.log('Fallback - found text at index:', index);
+      if (index !== -1) {
+        return {
+          startIndex: index,
+          endIndex: index + selectedText.length,
+        };
+      }
+      return { startIndex: 0, endIndex: selectedText.length };
+    }
+  };
+
   const handleTextSelection = (
     event: React.MouseEvent,
     paragraphId: string
@@ -317,15 +418,34 @@ const Reading: React.FC = () => {
       const selectedText = selection.toString().trim();
       const range = selection.getRangeAt(0);
 
-      // Calculate text position within the paragraph
-      const startIndex = range.startOffset;
-      const endIndex = range.endOffset;
+      // Find the paragraph element that contains the selection (same logic as handleMouseUp)
+      let paragraphElement = range.commonAncestorContainer;
+      while (
+        paragraphElement &&
+        paragraphElement.nodeType !== Node.ELEMENT_NODE &&
+        paragraphElement.parentNode
+      ) {
+        paragraphElement = paragraphElement.parentNode;
+      }
+
+      // Look for data-paragraph-id attribute
+      let foundParagraphId: string | null = null;
+      let currentElement = paragraphElement as Element;
+      while (currentElement && !foundParagraphId) {
+        foundParagraphId = currentElement.getAttribute('data-paragraph-id');
+        const parentElement = currentElement.parentElement;
+        if (!parentElement) break;
+        currentElement = parentElement;
+      }
+
+      // Calculate actual text position within the original paragraph content
+      const { startIndex, endIndex } = getTextPosition(range, currentElement);
 
       setContextMenu({
         x: event.clientX,
         y: event.clientY,
         selectedText,
-        paragraphId,
+        paragraphId: foundParagraphId || paragraphId,
         startIndex,
         endIndex,
       });
@@ -362,9 +482,8 @@ const Reading: React.FC = () => {
           currentElement = parentElement;
         }
 
-        // Calculate text position within the paragraph
-        const startIndex = range.startOffset;
-        const endIndex = range.endOffset;
+        // Calculate actual text position within the original paragraph content
+        const { startIndex, endIndex } = getTextPosition(range, currentElement);
 
         // Position menu near the end of selection
         setContextMenu({
@@ -415,9 +534,27 @@ const Reading: React.FC = () => {
     if (!bookId) return;
     try {
       const notesData = await notesService.getNotes({ bookId });
+      console.log(notesData.notes);
       setNotes(notesData.notes || notesData || []);
     } catch (error) {
       console.error('Failed to load notes:', error);
+    }
+  };
+
+  const deleteNote = async (noteId: string) => {
+    try {
+      await notesService.deleteNote(noteId);
+      console.log('Note deleted successfully');
+
+      // Close the popup
+      setSelectedNote(null);
+      setNotePopupPosition(null);
+
+      // Reload notes to update the UI
+      await loadNotes();
+    } catch (error) {
+      console.error('Failed to delete note:', error);
+      // TODO: Show error notification to user
     }
   };
 
@@ -429,7 +566,7 @@ const Reading: React.FC = () => {
     if (paragraphNotes.length === 0) {
       // No notes for this paragraph, render normally
       return (
-        <p className='mb-8' key={paragraph.id}>
+        <p className='mb-8' key={paragraph.id} data-paragraph-id={paragraph.id}>
           {paragraph.content}
         </p>
       );
@@ -465,10 +602,22 @@ const Reading: React.FC = () => {
             {notedText}
           </span>
           <button
-            onClick={() =>
-              setSelectedNote(selectedNote?.id === note.id ? null : note)
-            }
-            className='absolute -right-2 top-0 w-3 h-3 bg-black dark:bg-white rounded-full cursor-pointer transform translate-x-full hover:scale-110 transition-transform'
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const isCurrentlySelected = selectedNote?.id === note.id;
+
+              if (isCurrentlySelected) {
+                setSelectedNote(null);
+                setNotePopupPosition(null);
+              } else {
+                setSelectedNote(note);
+                setNotePopupPosition({
+                  x: rect.left + rect.width / 2,
+                  y: rect.top + rect.height / 2,
+                });
+              }
+            }}
+            className='absolute -top-1 -right-1 w-3 h-3 bg-blue-500 dark:bg-blue-400 rounded-full cursor-pointer hover:scale-110 transition-all duration-200 shadow-sm'
             title='Click to view note'
           />
         </span>
@@ -485,7 +634,7 @@ const Reading: React.FC = () => {
     }
 
     return (
-      <p className='mb-8' key={paragraph.id}>
+      <p className='mb-8' key={paragraph.id} data-paragraph-id={paragraph.id}>
         {contentParts}
       </p>
     );
@@ -516,6 +665,7 @@ const Reading: React.FC = () => {
           !target.closest('button[title="Click to view note"]')
         ) {
           setSelectedNote(null);
+          setNotePopupPosition(null);
         }
       }
     };
@@ -913,91 +1063,16 @@ const Reading: React.FC = () => {
       )}
 
       {/* Note Popup */}
-      {selectedNote && (
-        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
-          <div className='note-popup bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl'>
-            <div className='flex justify-between items-start mb-4'>
-              <h3 className='text-lg font-light text-black dark:text-white tracking-wide uppercase'>
-                Note
-              </h3>
-              <button
-                onClick={() => setSelectedNote(null)}
-                className='text-gray-500 hover:text-black dark:hover:text-white transition-colors'
-              >
-                <svg
-                  className='w-5 h-5'
-                  fill='none'
-                  stroke='currentColor'
-                  viewBox='0 0 24 24'
-                >
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M6 18L18 6M6 6l12 12'
-                  />
-                </svg>
-              </button>
-            </div>
-
-            {selectedNote.selectedText && (
-              <div className='mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400'>
-                <p className='text-sm font-light text-gray-700 dark:text-gray-300 italic'>
-                  "{selectedNote.selectedText}"
-                </p>
-              </div>
-            )}
-
-            <div className='space-y-3'>
-              {selectedNote.text && (
-                <div>
-                  <h4 className='text-sm font-light text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1'>
-                    Note
-                  </h4>
-                  <p className='text-black dark:text-white font-light leading-relaxed'>
-                    {selectedNote.text}
-                  </p>
-                </div>
-              )}
-
-              {selectedNote.firstContent && (
-                <div>
-                  <h4 className='text-sm font-light text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1'>
-                    Additional Content
-                  </h4>
-                  <p className='text-black dark:text-white font-light leading-relaxed'>
-                    {selectedNote.firstContent}
-                  </p>
-                </div>
-              )}
-
-              {selectedNote.secondContent && (
-                <div>
-                  <p className='text-black dark:text-white font-light leading-relaxed'>
-                    {selectedNote.secondContent}
-                  </p>
-                </div>
-              )}
-
-              {selectedNote.thirdContent && (
-                <div>
-                  <p className='text-black dark:text-white font-light leading-relaxed'>
-                    {selectedNote.thirdContent}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className='mt-4 pt-4 border-t border-gray-100 dark:border-gray-800'>
-              <p className='text-xs text-gray-400 dark:text-gray-500 font-light tracking-wide'>
-                {selectedNote.noteType && (
-                  <span className='capitalize'>{selectedNote.noteType} • </span>
-                )}
-                {new Date(selectedNote.createdAt).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-        </div>
+      {selectedNote && notePopupPosition && (
+        <NotePopup
+          note={selectedNote}
+          position={notePopupPosition}
+          onClose={() => {
+            setSelectedNote(null);
+            setNotePopupPosition(null);
+          }}
+          onDelete={deleteNote}
+        />
       )}
     </div>
   );

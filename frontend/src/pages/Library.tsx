@@ -19,6 +19,8 @@ import {
   Plus,
   Edit,
 } from 'lucide-react';
+import BookCard from '../components/BookCard';
+import Loader from '../components/Loader';
 
 interface SearchFilters {
   search: string;
@@ -432,15 +434,7 @@ const Library: React.FC = () => {
 
         {/* Books Grid */}
         {loading ? (
-          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8'>
-            {[...Array(8)].map((_, index) => (
-              <div key={index} className='animate-pulse'>
-                <div className='bg-gray-200 dark:bg-gray-700 h-64 rounded-lg mb-4'></div>
-                <div className='bg-gray-200 dark:bg-gray-700 h-4 rounded mb-2'></div>
-                <div className='bg-gray-200 dark:bg-gray-700 h-4 rounded w-2/3'></div>
-              </div>
-            ))}
-          </div>
+          <Loader />
         ) : books.length === 0 ? (
           <div className='text-center py-32'>
             <BookOpen className='w-16 h-16 text-gray-400 mx-auto mb-4' />
@@ -452,100 +446,9 @@ const Library: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8'>
+          <div className='flex flex-wrap justify-between gap-4'>
             {books.map((book) => (
-              <div key={book.id} className='group relative'>
-                <Link to={`/${book.id}`} className='cursor-pointer block'>
-                  <div
-                    className='relative overflow-hidden rounded-lg mb-4 bg-gray-100 dark:bg-gray-800 
-                                border border-gray-200 dark:border-gray-700 h-64
-                                group-hover:shadow-xl transition-all duration-300'
-                  >
-                    {book.imageUrl ? (
-                      <img
-                        src={book.imageUrl}
-                        alt={book.title}
-                        className='w-full h-full object-cover group-hover:scale-105 transition-transform duration-300'
-                      />
-                    ) : (
-                      <div className='w-full h-full flex items-center justify-center'>
-                        <BookOpen className='w-16 h-16 text-gray-400' />
-                      </div>
-                    )}
-
-                    {/* Status indicators for admin */}
-                    {user?.role === 'ADMIN' && (
-                      <div className='absolute top-2 right-2 flex gap-1'>
-                        {!book.isPublic && (
-                          <div className='bg-red-500 text-white px-2 py-1 rounded text-xs font-light'>
-                            <EyeOff className='w-3 h-3 inline mr-1' />
-                            Private
-                          </div>
-                        )}
-                        {book.isDraft && (
-                          <div className='bg-yellow-500 text-black px-2 py-1 rounded text-xs font-light'>
-                            <FileText className='w-3 h-3 inline mr-1' />
-                            Draft
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className='space-y-2'>
-                    <h3 className='text-lg font-light text-black dark:text-white tracking-wide group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors duration-200'>
-                      {book.title}
-                    </h3>
-
-                    {book.authors && book.authors.length > 0 && (
-                      <p className='text-sm text-gray-600 dark:text-gray-400 font-light tracking-wide'>
-                        by {book.authors.map((ba) => ba.author.name).join(', ')}
-                      </p>
-                    )}
-
-                    <div className='flex items-center gap-4 text-xs text-gray-500 dark:text-gray-500 font-light tracking-wide uppercase'>
-                      {book.language && (
-                        <span className='flex items-center gap-1'>
-                          <Globe className='w-3 h-3' />
-                          {book.language}
-                        </span>
-                      )}
-                      {book.genre && (
-                        <span className='flex items-center gap-1'>
-                          <BookOpen className='w-3 h-3' />
-                          {book.genre}
-                        </span>
-                      )}
-                      {book.editionPublished && (
-                        <span className='flex items-center gap-1'>
-                          <Calendar className='w-3 h-3' />
-                          {book.editionPublished}
-                        </span>
-                      )}
-                    </div>
-
-                    {book.description && (
-                      <p className='text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed line-clamp-3'>
-                        {book.description}
-                      </p>
-                    )}
-                  </div>
-                </Link>
-
-                {/* Admin Edit Button */}
-                {user?.role === 'ADMIN' && (
-                  <Link
-                    to={`/${book.id}/edit`}
-                    onClick={(e) => e.stopPropagation()}
-                    className='z-50 absolute top-2 left-2 bg-black dark:bg-white text-white dark:text-black
-                             p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200
-                             hover:bg-gray-800 dark:hover:bg-gray-200'
-                    title='Edit Book'
-                  >
-                    <Edit className='w-4 h-4' />
-                  </Link>
-                )}
-              </div>
+              <BookCard key={book.id} book={book} />
             ))}
           </div>
         )}

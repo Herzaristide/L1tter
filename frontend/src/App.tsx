@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -24,8 +24,6 @@ const AppRoutes: React.FC = () => {
 
   return (
     <div className='min-h-screen w-full bg-white dark:bg-black text-black dark:text-white'>
-      {/* Custom Mouse Cursor with delay */}
-
       {isAuthenticated && <Navbar />}
       <main className='px-8 lg:px-40 w-full'>
         <Routes>

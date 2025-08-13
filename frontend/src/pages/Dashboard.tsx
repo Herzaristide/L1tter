@@ -4,6 +4,7 @@ import searchService, { SearchResponse } from '../services/searchService';
 import BookCard from '../components/BookCard';
 import { progressService } from '../services/progressService';
 import { Book } from '../types';
+import Loader from '../components/Loader';
 
 const Dashboard: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchResponse | null>(
@@ -62,16 +63,6 @@ const Dashboard: React.FC = () => {
   return (
     <div className='min-h-screen bg-white dark:bg-black transition-all duration-300'>
       <div className='max-w-7xl mx-auto px-8 py-12'>
-        {/* Header */}
-        <div className='mb-12'>
-          <h1 className='text-4xl font-light text-black dark:text-white tracking-wider uppercase mb-4'>
-            Dashboard
-          </h1>
-          <p className='text-lg text-gray-600 dark:text-gray-400 font-light tracking-wide'>
-            Welcome back to your reading journey
-          </p>
-        </div>
-
         {/* Search Bar */}
         <div className='mb-12'>
           <SearchBar
@@ -80,16 +71,6 @@ const Dashboard: React.FC = () => {
           />
         </div>
 
-        {/* Search Results */}
-        {searchResults && (
-          <div className='mb-12'>
-            <h2 className='text-2xl font-light text-black dark:text-white tracking-wider uppercase mb-6'>
-              Search Results
-            </h2>
-            {/* Display search results here if needed */}
-          </div>
-        )}
-
         {/* Currently Reading Section */}
         <div className='mb-12'>
           <h2 className='text-2xl font-light text-black dark:text-white tracking-wider uppercase mb-6'>
@@ -97,15 +78,7 @@ const Dashboard: React.FC = () => {
           </h2>
 
           {loadingCarousel ? (
-            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8'>
-              {[...Array(4)].map((_, index) => (
-                <div key={index} className='animate-pulse'>
-                  <div className='bg-gray-200 dark:bg-gray-700 h-64 rounded-lg mb-4'></div>
-                  <div className='bg-gray-200 dark:bg-gray-700 h-4 rounded mb-2'></div>
-                  <div className='bg-gray-200 dark:bg-gray-700 h-4 rounded w-2/3'></div>
-                </div>
-              ))}
-            </div>
+            <Loader />
           ) : books.length === 0 ? (
             <div className='text-center py-32'>
               <div className='text-6xl mb-4'>📚</div>
@@ -117,7 +90,7 @@ const Dashboard: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8'>
+            <div className='flex gap-4'>
               {books.map((book) => (
                 <BookCard key={book.id} book={book} link={`/${book.id}`} />
               ))}
@@ -126,11 +99,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Loading State for Search */}
-        {isLoading && (
-          <div className='flex justify-center py-8'>
-            <div className='animate-spin h-8 w-8 border-2 border-gray-400 border-t-transparent rounded-full'></div>
-          </div>
-        )}
+        {isLoading && <Loader />}
       </div>
     </div>
   );
