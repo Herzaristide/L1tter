@@ -597,8 +597,8 @@ const Reading: React.FC = () => {
       // Add the noted text with indicator
       const notedText = paragraph.content.slice(startIndex, endIndex);
       contentParts.push(
-        <span key={`note-${note.id}`} className='relative inline-block'>
-          <span className='bg-yellow-100 dark:bg-yellow-900/30 px-1 rounded'>
+        <span key={`note-${note.id}`} className='relative '>
+          <span className='bg-yellow-100 dark:bg-yellow-900/30 rounded'>
             {notedText}
           </span>
           <button
@@ -617,7 +617,7 @@ const Reading: React.FC = () => {
                 });
               }
             }}
-            className='absolute -top-1 -right-1 w-3 h-3 bg-blue-500 dark:bg-blue-400 rounded-full cursor-pointer hover:scale-110 transition-all duration-200 shadow-sm'
+            className='absolute -top-1 -right-3 w-3 h-3 border-black dark:border-white border rounded-full cursor-pointer hover:scale-110 transition-all duration-200 shadow-sm'
             title='Click to view note'
           />
         </span>
