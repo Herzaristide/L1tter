@@ -12,10 +12,6 @@ const Reading: React.FC = () => {
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentProgress, setCurrentProgress] = useState<any>(null);
-  const [visibleParagraphs, setVisibleParagraphs] = useState<Set<string>>(
-    new Set()
-  );
-  const observerRef = useRef<IntersectionObserver | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -87,7 +83,6 @@ const Reading: React.FC = () => {
           paragraphId,
           position
         );
-        console.log('📊 Progress updated:', { paragraphId, position });
         setCurrentProgress(progressData);
       } catch (error) {
         console.error('Failed to update progress:', error);
@@ -96,44 +91,31 @@ const Reading: React.FC = () => {
     [bookId]
   );
 
-  // Immediate progress update on scroll
+  // Progress tracking on scroll
   const updateProgressOnScroll = useCallback(() => {
-    if (!book?.paragraphs || book.paragraphs.length === 0) return;
+    if (!book?.paragraphs?.length) return;
 
-    // Get all paragraph elements
     const paragraphElements = document.querySelectorAll('[data-paragraph-id]');
-    if (paragraphElements.length === 0) return;
+    if (!paragraphElements.length) return;
 
     const viewportHeight = window.innerHeight;
     const scrollTop = window.scrollY;
 
-    // Find the paragraph that's most prominently displayed
-    let currentParagraph = null;
+    let currentParagraph: Element | null = null;
     let bestScore = -1;
 
     paragraphElements.forEach((element) => {
       const rect = element.getBoundingClientRect();
-      const elementTop = rect.top + scrollTop;
-      const elementBottom = rect.bottom + scrollTop;
-      const elementCenter = elementTop + rect.height / 2;
-      const viewportCenter = scrollTop + viewportHeight / 2;
-
-      // Calculate how much of the paragraph is visible
       const visibleTop = Math.max(rect.top, 0);
       const visibleBottom = Math.min(rect.bottom, viewportHeight);
       const visibleHeight = Math.max(0, visibleBottom - visibleTop);
       const visibilityRatio = visibleHeight / rect.height;
 
-      // Prefer paragraphs that are:
-      // 1. More visible (higher visibility ratio)
-      // 2. Closer to viewport center
-      // 3. At least 30% visible to avoid flickering
       if (visibilityRatio > 0.3) {
+        const elementCenter = rect.top + rect.height / 2;
+        const viewportCenter = viewportHeight / 2;
         const distanceFromCenter = Math.abs(elementCenter - viewportCenter);
-        const maxDistance = viewportHeight; // Normalize distance
-        const centerScore = 1 - distanceFromCenter / maxDistance;
-
-        // Combined score: 70% visibility, 30% center alignment
+        const centerScore = 1 - distanceFromCenter / viewportHeight;
         const score = visibilityRatio * 0.7 + centerScore * 0.3;
 
         if (score > bestScore) {
@@ -143,90 +125,43 @@ const Reading: React.FC = () => {
       }
     });
 
-    if (currentParagraph) {
-      const paragraphId = currentParagraph.getAttribute('data-paragraph-id');
+    if (currentParagraph !== null) {
+      const element = currentParagraph as Element;
+      const paragraphId = element.getAttribute('data-paragraph-id');
       if (paragraphId) {
-        // Find paragraph index for position calculation
         const paragraphIndex = book.paragraphs.findIndex(
           (p: any) => p.id === paragraphId
         );
         if (paragraphIndex !== -1) {
-          // Calculate more precise position based on scroll within the paragraph
-          const rect = currentParagraph.getBoundingClientRect();
-          const scrollTop = window.scrollY;
-          const elementTop = rect.top + scrollTop;
-          const viewportTop = scrollTop;
-
-          // Calculate how far through this specific paragraph we are
+          const rect = element.getBoundingClientRect();
           const progressThroughParagraph = Math.max(
             0,
             Math.min(
               1,
-              (viewportTop - elementTop + viewportHeight * 0.3) / rect.height
+              (scrollTop - (rect.top + scrollTop) + viewportHeight * 0.3) /
+                rect.height
             )
           );
 
-          // Calculate overall book position
           const basePosition = (paragraphIndex / book.paragraphs.length) * 100;
           const paragraphWeight = (1 / book.paragraphs.length) * 100;
           const precisePosition =
             basePosition + progressThroughParagraph * paragraphWeight;
-
           const finalPosition = Math.max(
             0,
             Math.min(100, Math.round(precisePosition))
           );
+
           updateProgress(paragraphId, finalPosition);
         }
       }
     }
   }, [book?.paragraphs, updateProgress]);
 
-  // Set up intersection observer for paragraph visibility tracking (simplified)
+  // Unified scroll handler for both progress and header visibility
   useEffect(() => {
-    if (!book?.paragraphs || book.paragraphs.length === 0) return;
+    if (!book?.paragraphs?.length) return;
 
-    const observerOptions = {
-      root: null,
-      rootMargin: '0px',
-      threshold: 0.1, // Trigger when 10% of paragraph is visible
-    };
-
-    observerRef.current = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        const paragraphId = entry.target.getAttribute('data-paragraph-id');
-        if (!paragraphId) return;
-
-        if (entry.isIntersecting) {
-          setVisibleParagraphs((prev) => new Set(prev).add(paragraphId));
-        } else {
-          setVisibleParagraphs((prev) => {
-            const newSet = new Set(prev);
-            newSet.delete(paragraphId);
-            return newSet;
-          });
-        }
-      });
-    }, observerOptions);
-
-    // Observe all paragraph elements
-    const paragraphElements = document.querySelectorAll('[data-paragraph-id]');
-    paragraphElements.forEach((element) => {
-      observerRef.current?.observe(element);
-    });
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
-  }, [book?.paragraphs]);
-
-  // Add scroll event listener for real-time progress updates
-  useEffect(() => {
-    if (!book?.paragraphs || book.paragraphs.length === 0) return;
-
-    // Throttle scroll events for better performance
     let scrollTimeout: NodeJS.Timeout | null = null;
 
     const handleScroll = () => {
@@ -236,144 +171,107 @@ const Reading: React.FC = () => {
         setNotePopupPosition(null);
       }
 
-      if (scrollTimeout) {
-        clearTimeout(scrollTimeout);
+      // Check header visibility
+      if (headerRef.current) {
+        const headerVisible =
+          headerRef.current.getBoundingClientRect().bottom > 0;
+        setIsOriginalHeaderVisible(headerVisible);
       }
 
-      // Use a very short timeout to make it feel immediate but still performant
-      scrollTimeout = setTimeout(() => {
-        updateProgressOnScroll();
-      }, 100); // Update every 100ms during scroll
+      // Throttle progress updates
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(updateProgressOnScroll, 100);
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-
-    // Also update immediately when component mounts
-    updateProgressOnScroll();
+    updateProgressOnScroll(); // Initial update
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      if (scrollTimeout) {
-        clearTimeout(scrollTimeout);
-      }
+      if (scrollTimeout) clearTimeout(scrollTimeout);
     };
-  }, [updateProgressOnScroll, selectedNote]);
+  }, [updateProgressOnScroll, selectedNote, book?.paragraphs]);
 
-  // Scroll to last read position when book loads (only once per session)
+  // Auto-scroll to last read position
   useEffect(() => {
-    if (book?.paragraphs && currentProgress?.paragraphId && !hasAutoScrolled) {
+    if (
+      book?.paragraphs?.length &&
+      currentProgress?.paragraphId &&
+      !hasAutoScrolled
+    ) {
       const timeoutId = setTimeout(() => {
         const paragraphElement = document.querySelector(
           `[data-paragraph-id="${currentProgress.paragraphId}"]`
         );
         if (paragraphElement) {
-          console.log(
-            `📖 Auto-scrolling to last read position: paragraph ${currentProgress.paragraphId}`
-          );
           paragraphElement.scrollIntoView({
             behavior: 'smooth',
             block: 'start',
           });
-          // Mark that auto-scroll has happened
           setHasAutoScrolled(true);
         }
-      }, 500); // Small delay to ensure DOM is ready
+      }, 500);
 
       return () => clearTimeout(timeoutId);
     }
   }, [book?.paragraphs, currentProgress?.paragraphId, hasAutoScrolled]);
 
-  // Detect when original header is out of view
-  useEffect(() => {
-    const handleScroll = () => {
-      if (headerRef.current) {
-        const headerRect = headerRef.current.getBoundingClientRect();
-        // Header is visible if any part of it is above the fold
-        const headerVisible = headerRect.bottom > 0;
-        setIsOriginalHeaderVisible(headerVisible);
-      }
-    };
-
-    // Throttle scroll events for better performance
-    let ticking = false;
-    const throttledHandleScroll = () => {
-      if (!ticking) {
-        requestAnimationFrame(() => {
-          handleScroll();
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    window.addEventListener('scroll', throttledHandleScroll, { passive: true });
-
-    return () => {
-      window.removeEventListener('scroll', throttledHandleScroll);
-    };
-  }, []);
-
   const toggleFloatingHeader = () => {
     setIsFloatingHeaderOpen(!isFloatingHeaderOpen);
   };
 
-  // Calculate the actual text position within the original paragraph content by walking the DOM
+  // Helper function to find paragraph element and ID from selection
+  const findParagraphFromSelection = (range: Range) => {
+    let paragraphElement = range.commonAncestorContainer;
+    while (
+      paragraphElement &&
+      paragraphElement.nodeType !== Node.ELEMENT_NODE &&
+      paragraphElement.parentNode
+    ) {
+      paragraphElement = paragraphElement.parentNode;
+    }
+
+    let paragraphId: string | null = null;
+    let currentElement = paragraphElement as Element;
+    while (currentElement && !paragraphId) {
+      paragraphId = currentElement.getAttribute('data-paragraph-id');
+      const parentElement = currentElement.parentElement;
+      if (!parentElement) break;
+      currentElement = parentElement;
+    }
+
+    return { paragraphElement: currentElement, paragraphId };
+  };
+
+  // Simplified text position calculation
   const getTextPosition = (
     range: Range,
     paragraphElement: Element
   ): { startIndex: number; endIndex: number } => {
     const paragraphId = paragraphElement.getAttribute('data-paragraph-id');
     if (!paragraphId) {
-      console.warn('No paragraph ID found');
       return { startIndex: 0, endIndex: 0 };
     }
 
-    // Find the paragraph data
     const paragraph = book?.paragraphs?.find((p: any) => p.id === paragraphId);
     if (!paragraph) {
-      console.warn('No paragraph data found for ID:', paragraphId);
       return { startIndex: 0, endIndex: 0 };
     }
 
-    console.log('Selection range:', {
-      startContainer: range.startContainer,
-      startOffset: range.startOffset,
-      endContainer: range.endContainer,
-      endOffset: range.endOffset,
-      selectedText: range.toString(),
-    });
-
-    // Function to get the text offset of a node relative to the paragraph
     const getTextOffset = (node: Node, offset: number): number => {
       let textOffset = 0;
       const walker = document.createTreeWalker(
         paragraphElement,
-        NodeFilter.SHOW_TEXT,
-        null,
-        false
+        NodeFilter.SHOW_TEXT
       );
 
       let currentNode;
       while ((currentNode = walker.nextNode())) {
-        console.log('Walking text node:', currentNode.textContent);
         if (currentNode === node) {
-          console.log('Found target node, offset:', textOffset + offset);
           return textOffset + offset;
         }
         textOffset += (currentNode.textContent || '').length;
       }
-
-      console.warn('Target node not found in tree walk');
-      // If we can't find the node, try to find it by traversing up the tree
-      let parentNode = node;
-      while (parentNode && parentNode !== paragraphElement) {
-        if (parentNode.nodeType === Node.TEXT_NODE) {
-          // Try walking again with the parent
-          break;
-        }
-        parentNode = parentNode.parentNode;
-      }
-
       return textOffset;
     };
 
@@ -383,19 +281,11 @@ const Reading: React.FC = () => {
         range.startOffset
       );
       const endOffset = getTextOffset(range.endContainer, range.endOffset);
-
-      console.log('Calculated offsets:', { startOffset, endOffset });
-
-      return {
-        startIndex: startOffset,
-        endIndex: endOffset,
-      };
+      return { startIndex: startOffset, endIndex: endOffset };
     } catch (e) {
-      console.error('Error calculating text position:', e);
-      // Fallback: try to find the text in the original content
+      // Fallback: find text in original content
       const selectedText = range.toString();
       const index = paragraph.content.indexOf(selectedText);
-      console.log('Fallback - found text at index:', index);
       if (index !== -1) {
         return {
           startIndex: index,
@@ -406,126 +296,48 @@ const Reading: React.FC = () => {
     }
   };
 
+  // Unified text selection handler
   const handleTextSelection = (
     event: React.MouseEvent,
-    paragraphId: string
+    isRightClick = false
   ) => {
-    // Handle right-click context menu
-    event.preventDefault();
-    const selection = window.getSelection();
+    if (isRightClick) event.preventDefault();
 
-    if (selection && selection.toString().trim().length > 0) {
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (!selection || !selection.toString().trim()) return;
+
       const selectedText = selection.toString().trim();
       const range = selection.getRangeAt(0);
+      const { paragraphElement, paragraphId } =
+        findParagraphFromSelection(range);
+      const { startIndex, endIndex } = getTextPosition(range, paragraphElement);
 
-      // Find the paragraph element that contains the selection (same logic as handleMouseUp)
-      let paragraphElement = range.commonAncestorContainer;
-      while (
-        paragraphElement &&
-        paragraphElement.nodeType !== Node.ELEMENT_NODE &&
-        paragraphElement.parentNode
-      ) {
-        paragraphElement = paragraphElement.parentNode;
-      }
-
-      // Look for data-paragraph-id attribute
-      let foundParagraphId: string | null = null;
-      let currentElement = paragraphElement as Element;
-      while (currentElement && !foundParagraphId) {
-        foundParagraphId = currentElement.getAttribute('data-paragraph-id');
-        const parentElement = currentElement.parentElement;
-        if (!parentElement) break;
-        currentElement = parentElement;
-      }
-
-      // Calculate actual text position within the original paragraph content
-      const { startIndex, endIndex } = getTextPosition(range, currentElement);
-
+      const rect = range.getBoundingClientRect();
       setContextMenu({
-        x: event.clientX,
-        y: event.clientY,
+        x: isRightClick ? event.clientX : rect.right + 10,
+        y: isRightClick ? event.clientY : rect.top - 10,
         selectedText,
-        paragraphId: foundParagraphId || paragraphId,
+        paragraphId: paragraphId || undefined,
         startIndex,
         endIndex,
       });
-    }
-  };
-
-  const handleMouseUp = (event: React.MouseEvent) => {
-    // Auto-show context menu on text selection
-    setTimeout(() => {
-      const selection = window.getSelection();
-
-      if (selection && selection.toString().trim().length > 0) {
-        const selectedText = selection.toString().trim();
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-
-        // Find the paragraph element that contains the selection
-        let paragraphElement = range.commonAncestorContainer;
-        while (
-          paragraphElement &&
-          paragraphElement.nodeType !== Node.ELEMENT_NODE &&
-          paragraphElement.parentNode
-        ) {
-          paragraphElement = paragraphElement.parentNode;
-        }
-
-        // Look for data-paragraph-id attribute
-        let paragraphId: string | null = null;
-        let currentElement = paragraphElement as Element;
-        while (currentElement && !paragraphId) {
-          paragraphId = currentElement.getAttribute('data-paragraph-id');
-          const parentElement = currentElement.parentElement;
-          if (!parentElement) break;
-          currentElement = parentElement;
-        }
-
-        // Calculate actual text position within the original paragraph content
-        const { startIndex, endIndex } = getTextPosition(range, currentElement);
-
-        // Position menu near the end of selection
-        setContextMenu({
-          x: rect.right + 10,
-          y: rect.top - 10,
-          selectedText,
-          paragraphId: paragraphId || undefined,
-          startIndex,
-          endIndex,
-        });
-      }
-    }, 100); // Small delay to ensure selection is complete
+    }, 100);
   };
 
   const handleContextMenuAction = (action: string, text: string) => {
     switch (action) {
       case 'copy':
-        navigator.clipboard.writeText(text);
-        console.log('Copied original text to clipboard:', text);
-        break;
       case 'copy-translation':
         navigator.clipboard.writeText(text);
-        console.log('Copied French translation to clipboard:', text);
-        break;
-      case 'highlight':
-        console.log('Highlight text:', text);
-        // TODO: Implement highlighting functionality
         break;
       case 'note-created':
-        console.log('Note created successfully for text:', text);
-        // Reload notes after creation
         loadNotes();
         break;
+      case 'highlight':
       case 'note-error':
-        console.log('Failed to create note for text:', text);
-        // TODO: Show error notification
-        break;
       case 'search':
-        console.log('Search for text:', text);
-        // TODO: Implement search functionality
-        break;
-      default:
+        // TODO: Implement these features
         break;
     }
   };
@@ -534,7 +346,6 @@ const Reading: React.FC = () => {
     if (!bookId) return;
     try {
       const notesData = await notesService.getNotes({ bookId });
-      console.log(notesData.notes);
       setNotes(notesData.notes || notesData || []);
     } catch (error) {
       console.error('Failed to load notes:', error);
@@ -544,17 +355,11 @@ const Reading: React.FC = () => {
   const deleteNote = async (noteId: string) => {
     try {
       await notesService.deleteNote(noteId);
-      console.log('Note deleted successfully');
-
-      // Close the popup
       setSelectedNote(null);
       setNotePopupPosition(null);
-
-      // Reload notes to update the UI
       await loadNotes();
     } catch (error) {
       console.error('Failed to delete note:', error);
-      // TODO: Show error notification to user
     }
   };
 
@@ -642,38 +447,31 @@ const Reading: React.FC = () => {
 
   const closeContextMenu = () => {
     setContextMenu(null);
-    // Clear text selection
     window.getSelection()?.removeAllRanges();
   };
 
-  // Close context menu when clicking elsewhere or when selection changes
+  // Handle clicks outside menus and selection changes
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
-      // Close menu if clicking outside of it
-      if (contextMenu) {
-        const target = event.target as HTMLElement;
-        if (!target.closest('[data-context-menu]')) {
-          setContextMenu(null);
-        }
+      const target = event.target as HTMLElement;
+
+      if (contextMenu && !target.closest('[data-context-menu]')) {
+        setContextMenu(null);
       }
 
-      // Close note popup if clicking outside of it
-      if (selectedNote) {
-        const target = event.target as HTMLElement;
-        if (
-          !target.closest('.note-popup') &&
-          !target.closest('button[title="Click to view note"]')
-        ) {
-          setSelectedNote(null);
-          setNotePopupPosition(null);
-        }
+      if (
+        selectedNote &&
+        !target.closest('.note-popup') &&
+        !target.closest('button[title="Click to view note"]')
+      ) {
+        setSelectedNote(null);
+        setNotePopupPosition(null);
       }
     };
 
     const handleSelectionChange = () => {
-      // Close menu if selection is cleared
       const selection = window.getSelection();
-      if (!selection || selection.toString().trim().length === 0) {
+      if (!selection || !selection.toString().trim()) {
         setContextMenu(null);
       }
     };
@@ -687,12 +485,10 @@ const Reading: React.FC = () => {
     };
   }, [contextMenu, selectedNote]);
 
-  // Cleanup on unmount
+  // Component cleanup
   useEffect(() => {
     return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
+      // No cleanup needed since we removed intersection observer
     };
   }, []);
 
@@ -795,6 +591,8 @@ const Reading: React.FC = () => {
               <button
                 onClick={() => setIsFloatingHeaderOpen(false)}
                 className='absolute top-4 right-4 w-8 h-8 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full flex items-center justify-center transition-colors'
+                title='Close floating header'
+                aria-label='Close floating header'
               >
                 <svg
                   className='w-4 h-4'
@@ -1025,8 +823,8 @@ const Reading: React.FC = () => {
                 <div
                   data-paragraph-id={paragraph.id}
                   className='max-w-none text-black dark:text-white leading-loose tracking-wide font-light text-lg select-text text-justify'
-                  onContextMenu={(e) => handleTextSelection(e, paragraph.id)}
-                  onMouseUp={handleMouseUp}
+                  onContextMenu={(e) => handleTextSelection(e, true)}
+                  onMouseUp={(e) => handleTextSelection(e, false)}
                 >
                   {renderParagraphWithNotes(paragraph)}
                 </div>
